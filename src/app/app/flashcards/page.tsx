@@ -15,7 +15,8 @@ import {
     ChevronLeft,
     ChevronRight,
     RotateCw,
-    History
+    History,
+    Eye
 } from "lucide-react";
 import { motion, AnimatePresence } from "framer-motion";
 
@@ -31,14 +32,24 @@ interface Unit {
     subject_id: string;
 }
 
+interface Flashcard {
+    question: string;
+    answer: string;
+}
+
 interface FlashcardSet {
     id: string;
     title: string;
-    cards: any[];
+    flashcards?: Flashcard[]; // Optional because list API doesn't return them
     subject: string;
     unit: string;
-    time: string;
-    createdAt: string;
+    size: number;
+    views: number;
+    last_viewed_at?: string;
+    created_at: string;
+    grade?: string;
+    curriculum?: string;
+    country?: string;
 }
 
 export default function FlashcardsPage() {
@@ -58,25 +69,32 @@ export default function FlashcardsPage() {
     const [currentCardIndex, setCurrentCardIndex] = useState(0);
     const [isFlipped, setIsFlipped] = useState(false);
     const [viewedCards, setViewedCards] = useState<Set<number>>(new Set());
+    const [isFetchingDetails, setIsFetchingDetails] = useState(false);
+    const [isLoadingFlashcards, setIsLoadingFlashcards] = useState(false);
 
-    // Load flashcards from localStorage on mount
-    useEffect(() => {
-        const savedSets = localStorage.getItem("shiksha_flashcards");
-        if (savedSets) {
-            try {
-                setFlashcardSets(JSON.parse(savedSets));
-            } catch (e) {
-                console.error("Failed to parse saved flashcards", e);
+    const fetchFlashcards = async () => {
+        setIsLoadingFlashcards(true);
+        try {
+            const token = localStorage.getItem("access_token");
+            const response = await fetch("https://shiksha-gpt.com/api/flashcards?limit=50&skip=0", {
+                headers: {
+                    "Authorization": `Bearer ${token}`
+                }
+            });
+            if (response.ok) {
+                const data = await response.json();
+                setFlashcardSets(data.flashcards);
             }
+        } catch (error) {
+            console.error("Failed to fetch flashcards", error);
+        } finally {
+            setIsLoadingFlashcards(false);
         }
-    }, []);
+    };
 
-    // Save flashcards to localStorage whenever they change
     useEffect(() => {
-        if (flashcardSets.length > 0) {
-            localStorage.setItem("shiksha_flashcards", JSON.stringify(flashcardSets));
-        }
-    }, [flashcardSets]);
+        fetchFlashcards();
+    }, []);
 
     const fetchSubjects = async () => {
         setIsLoadingSubjects(true);
@@ -146,15 +164,62 @@ export default function FlashcardsPage() {
         resetForm();
     };
 
-    const handleStartFlashcards = (set: FlashcardSet) => {
-        setActiveSet(set);
-        setCurrentCardIndex(0);
-        setIsFlipped(false);
-        setViewedCards(new Set([0]));
+    const handleStartFlashcards = async (set: FlashcardSet) => {
+        // Increment view count
+        try {
+            const token = localStorage.getItem("access_token");
+            fetch(`https://shiksha-gpt.com/api/flashcard/${set.id}/view`, {
+                method: "POST",
+                headers: {
+                    "Authorization": `Bearer ${token}`
+                }
+            }).then(async (res) => {
+                if (res.ok) {
+                    const viewData = await res.json();
+                    setFlashcardSets(prev => prev.map(s =>
+                        s.id === set.id ? { ...s, views: viewData.views, last_viewed_at: viewData.last_viewed_at } : s
+                    ));
+                }
+            });
+        } catch (e) {
+            console.error("Failed to increment view count", e);
+        }
+
+        if (!set.flashcards) {
+            setIsFetchingDetails(true);
+            try {
+                const token = localStorage.getItem("access_token");
+                const response = await fetch(`https://shiksha-gpt.com/api/flashcard/${set.id}`, {
+                    headers: {
+                        "Authorization": `Bearer ${token}`
+                    }
+                });
+                if (response.ok) {
+                    const data = await response.json();
+
+                    // Update the set in the local state with flashcards
+                    setFlashcardSets(prev => prev.map(s => s.id === set.id ? { ...s, flashcards: data.flashcards } : s));
+
+                    setActiveSet({ ...set, flashcards: data.flashcards });
+                    setCurrentCardIndex(0);
+                    setIsFlipped(false);
+                    setViewedCards(new Set([0]));
+                }
+            } catch (error) {
+                console.error("Failed to fetch flashcard details", error);
+            } finally {
+                setIsFetchingDetails(false);
+            }
+        } else {
+            setActiveSet(set);
+            setCurrentCardIndex(0);
+            setIsFlipped(false);
+            setViewedCards(new Set([0]));
+        }
     };
 
     const handleNextCard = () => {
-        if (activeSet && currentCardIndex < activeSet.cards.length - 1) {
+        if (activeSet && activeSet.flashcards && currentCardIndex < activeSet.flashcards.length - 1) {
             setCurrentCardIndex(prev => prev + 1);
             setIsFlipped(false);
             setViewedCards(prev => new Set(prev).add(currentCardIndex + 1));
@@ -173,6 +238,7 @@ export default function FlashcardsPage() {
         setCurrentCardIndex(0);
         setIsFlipped(false);
         setViewedCards(new Set());
+        fetchFlashcards(); // Refresh the list from API on exit
     };
 
     const handleGenerateFlashcards = async () => {
@@ -192,8 +258,8 @@ export default function FlashcardsPage() {
                 }
             }
 
-            // Using same API as quiz but we'll treat questions/answers as front/back of flashcards
-            const response = await fetch("https://shiksha-gpt.com/api/generate/quiz", {
+            // Using new flashcard generation API
+            const response = await fetch("https://shiksha-gpt.com/api/generate/flashcard", {
                 method: "POST",
                 headers: {
                     "Content-Type": "application/json",
@@ -212,13 +278,14 @@ export default function FlashcardsPage() {
             if (response.ok) {
                 const data = await response.json();
                 const newSet: FlashcardSet = {
-                    id: data.quiz_id || Date.now().toString(),
-                    title: `${selectedUnit.name} Flashcards`,
-                    cards: data.response,
+                    id: data.flashcard_id || Date.now().toString(),
+                    title: `${selectedSubject.name} - ${selectedUnit.name}`,
+                    flashcards: data.response,
                     subject: selectedSubject.name,
                     unit: selectedUnit.name,
-                    time: `${numCards} cards`,
-                    createdAt: data.metadata?.created_at || new Date().toISOString()
+                    size: numCards,
+                    views: 0,
+                    created_at: data.metadata?.created_at || new Date().toISOString()
                 };
                 setFlashcardSets(prev => [newSet, ...prev]);
                 handleCloseModal();
@@ -231,9 +298,9 @@ export default function FlashcardsPage() {
         }
     };
 
-    if (activeSet) {
-        const currentCard = activeSet.cards[currentCardIndex];
-        const progress = ((viewedCards.size) / activeSet.cards.length) * 100;
+    if (activeSet && activeSet.flashcards) {
+        const currentCard = activeSet.flashcards[currentCardIndex];
+        const progress = ((viewedCards.size) / activeSet.flashcards.length) * 100;
 
         return (
             <div className="max-w-[700px] mx-auto p-4 py-4 space-y-6">
@@ -245,7 +312,7 @@ export default function FlashcardsPage() {
                     <div className="flex items-center gap-3">
                         <span className="text-[8px] font-bold text-slate-400 uppercase tracking-widest italic">Flip Card</span>
                         <span className="text-[10px] font-bold text-primary bg-primary/10 px-2.5 py-1 rounded-full uppercase tracking-widest">
-                            {currentCardIndex + 1} / {activeSet.cards.length}
+                            {currentCardIndex + 1} / {activeSet.flashcards.length}
                         </span>
                     </div>
                 </div>
@@ -254,7 +321,7 @@ export default function FlashcardsPage() {
                 <div className="w-full h-1 bg-slate-100 dark:bg-white/5 rounded-full overflow-hidden">
                     <motion.div
                         initial={{ width: 0 }}
-                        animate={{ width: `${((currentCardIndex + 1) / activeSet.cards.length) * 100}%` }}
+                        animate={{ width: `${((currentCardIndex + 1) / activeSet.flashcards.length) * 100}%` }}
                         className="h-full bg-primary"
                     />
                 </div>
@@ -290,7 +357,7 @@ export default function FlashcardsPage() {
                         >
                             <span className="text-[9px] font-bold text-primary uppercase tracking-widest mb-4 block">Answer</span>
                             <h2 className="text-xl md:text-2xl font-bold dark:text-white leading-tight px-4">
-                                {currentCard.answer || currentCard.correct_answer || "No answer available"}
+                                {currentCard.answer || "No answer available"}
                             </h2>
                             <div className="mt-8 flex items-center gap-2 text-primary/30">
                                 <RotateCw className="w-3.5 h-3.5" />
@@ -311,7 +378,7 @@ export default function FlashcardsPage() {
                     </button>
 
                     <div className="flex gap-3">
-                        {currentCardIndex === activeSet.cards.length - 1 ? (
+                        {currentCardIndex === activeSet.flashcards.length - 1 ? (
                             <button
                                 onClick={(e) => { e.stopPropagation(); resetFlashcardState(); }}
                                 className="bg-primary text-white px-6 py-2.5 rounded-xl font-bold flex items-center gap-2 shadow-lg shadow-primary/20 hover:scale-[1.02] active:scale-95 transition-all text-xs"
@@ -369,7 +436,12 @@ export default function FlashcardsPage() {
                 </div>
             </div>
 
-            {flashcardSets.length === 0 ? (
+            {isLoadingFlashcards ? (
+                <div className="flex flex-col items-center justify-center py-20 text-center space-y-4">
+                    <Loader2 className="w-10 h-10 animate-spin text-primary/40" />
+                    <p className="text-slate-500 text-sm">Fetching your flashcards...</p>
+                </div>
+            ) : flashcardSets.length === 0 ? (
                 <div className="flex flex-col items-center justify-center py-20 text-center space-y-4 bg-white dark:bg-[#121214] border border-dashed border-slate-300 dark:border-slate-800 rounded-[32px]">
                     <div className="w-16 h-16 bg-primary/5 rounded-full flex items-center justify-center">
                         <SquareStack className="w-8 h-8 text-primary/40" />
@@ -418,7 +490,10 @@ export default function FlashcardsPage() {
 
                                 <motion.div layout className={`flex items-center gap-3 text-slate-500 text-[9px] ${viewMode === "grid" ? "" : "ml-4"}`}>
                                     <span className="flex items-center gap-1.5 whitespace-nowrap">
-                                        <BookOpen className="w-2.5 h-2.5" /> {set.cards.length} Cards
+                                        <BookOpen className="w-2.5 h-2.5" /> {set.size || set.flashcards?.length || 0} Cards
+                                    </span>
+                                    <span className="flex items-center gap-1.5 whitespace-nowrap">
+                                        <Eye className="w-2.5 h-2.5" /> {set.views || 0} Views
                                     </span>
                                 </motion.div>
                             </motion.div>
@@ -551,6 +626,23 @@ export default function FlashcardsPage() {
                             </div>
                         </motion.div>
                     </>
+                )}
+            </AnimatePresence>
+
+            {/* Loading Overlay for fetching details */}
+            <AnimatePresence>
+                {isFetchingDetails && (
+                    <motion.div
+                        initial={{ opacity: 0 }}
+                        animate={{ opacity: 1 }}
+                        exit={{ opacity: 0 }}
+                        className="fixed inset-0 bg-black/30 backdrop-blur-sm z-[200] flex items-center justify-center"
+                    >
+                        <div className="bg-white dark:bg-[#1A1A1E] p-6 rounded-2xl shadow-xl flex flex-col items-center gap-4 border border-slate-200 dark:border-white/10">
+                            <Loader2 className="w-8 h-8 animate-spin text-primary" />
+                            <p className="text-sm font-bold dark:text-white">Loading cards...</p>
+                        </div>
+                    </motion.div>
                 )}
             </AnimatePresence>
 
