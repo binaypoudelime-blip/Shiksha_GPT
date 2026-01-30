@@ -36,14 +36,13 @@ interface Unit {
 
 interface Summary {
     id: string;
-    summary_id: string;
-    title: string;
-    content: string;
     subject: string;
     unit: string;
-    grade: string;
     deep_search: boolean;
-    createdAt: string;
+    created_at: string;
+    summary_preview?: string;
+    summary_text?: string;
+    messages?: Message[];
 }
 
 interface Message {
@@ -62,6 +61,9 @@ export default function SummariesPage() {
     const [selectedUnit, setSelectedUnit] = useState<Unit | null>(null);
     const [deepSearch, setDeepSearch] = useState(false);
     const [grade, setGrade] = useState("10"); // Default grade
+    const [isLoadingSummaries, setIsLoadingSummaries] = useState(false);
+    const [isFetchingDetails, setIsFetchingDetails] = useState(false);
+    const [messages, setMessages] = useState<Message[]>([]);
     const [isLoadingSubjects, setIsLoadingSubjects] = useState(false);
     const [isLoadingUnits, setIsLoadingUnits] = useState(false);
     const [isGenerating, setIsGenerating] = useState(false);
@@ -69,29 +71,32 @@ export default function SummariesPage() {
     const [activeSummary, setActiveSummary] = useState<Summary | null>(null);
     const [followUpQuestion, setFollowUpQuestion] = useState("");
     const [isAskingFollowUp, setIsAskingFollowUp] = useState(false);
-    const [messages, setMessages] = useState<Message[]>([]);
-
     const textareaRef = useRef<HTMLTextAreaElement>(null);
     const messagesEndRef = useRef<HTMLDivElement>(null);
 
-    // Load summarizer cards from localStorage on mount
-    useEffect(() => {
-        const savedSummarizer = localStorage.getItem("shiksha_summarizer");
-        if (savedSummarizer) {
-            try {
-                setSummaries(JSON.parse(savedSummarizer));
-            } catch (e) {
-                console.error("Failed to parse saved summarizer cards", e);
+    const fetchSummaries = async () => {
+        setIsLoadingSummaries(true);
+        try {
+            const token = localStorage.getItem("access_token");
+            const response = await fetch("https://shiksha-gpt.com/api/summaries?limit=50&skip=0", {
+                headers: {
+                    "Authorization": `Bearer ${token}`
+                }
+            });
+            if (response.ok) {
+                const data = await response.json();
+                setSummaries(data.summaries);
             }
+        } catch (error) {
+            console.error("Failed to fetch summaries", error);
+        } finally {
+            setIsLoadingSummaries(false);
         }
-    }, []);
+    };
 
-    // Save summarizer cards to localStorage whenever they change
     useEffect(() => {
-        if (summaries.length > 0) {
-            localStorage.setItem("shiksha_summarizer", JSON.stringify(summaries));
-        }
-    }, [summaries]);
+        fetchSummaries();
+    }, []);
 
     const fetchSubjects = async () => {
         setIsLoadingSubjects(true);
@@ -174,14 +179,43 @@ export default function SummariesPage() {
         resetForm();
     };
 
-    const handleViewSummary = (summary: Summary) => {
-        setActiveSummary(summary);
-        setMessages([]); // Reset messages when viewing a different summary
+    const handleViewSummary = async (summary: Summary) => {
+        if (!summary.summary_text) {
+            setIsFetchingDetails(true);
+            try {
+                const token = localStorage.getItem("access_token");
+                const response = await fetch(`https://shiksha-gpt.com/api/summary/${summary.id}`, {
+                    headers: {
+                        "Authorization": `Bearer ${token}`
+                    }
+                });
+                if (response.ok) {
+                    const data = await response.json();
+                    const fullSummary = {
+                        ...summary,
+                        summary_text: data.summary_text,
+                        messages: data.messages
+                    };
+                    // Update the list with full details
+                    setSummaries(prev => prev.map(s => s.id === summary.id ? fullSummary : s));
+                    setActiveSummary(fullSummary);
+                    setMessages(data.messages || []);
+                }
+            } catch (error) {
+                console.error("Failed to fetch summary details", error);
+            } finally {
+                setIsFetchingDetails(false);
+            }
+        } else {
+            setActiveSummary(summary);
+            setMessages(summary.messages || []);
+        }
     };
 
     const handleExitSummary = () => {
         setActiveSummary(null);
         setMessages([]);
+        fetchSummaries(); // Refresh list on exit
     };
 
     const handleGenerateSummary = async () => {
@@ -197,8 +231,6 @@ export default function SummariesPage() {
             }
 
             const user = JSON.parse(userStr);
-            const userId = user._id;
-            const userGrade = user.grade;
 
             const response = await fetch("https://shiksha-gpt.com/api/generate/summary", {
                 method: "POST",
@@ -207,28 +239,24 @@ export default function SummariesPage() {
                     "Authorization": `Bearer ${token}`
                 },
                 body: JSON.stringify({
-                    user_id: userId,
                     subject: selectedSubject.name,
                     unit: selectedUnit.name,
-                    deep_search: false,
-                    grade: userGrade.toString(),
-                    country: user.country,
-                    curriculum: user.curriculum
+                    grade: user.grade?.toString() || "",
+                    country: user.country || "",
+                    curriculum: user.curriculum || "",
+                    deep_search: deepSearch
                 })
             });
 
             if (response.ok) {
                 const data = await response.json();
                 const newSummary: Summary = {
-                    id: Date.now().toString(),
-                    summary_id: data.summary_id,
-                    title: `${selectedUnit.name} Summary`,
-                    content: data.response,
+                    id: data.summary_id,
                     subject: selectedSubject.name,
                     unit: selectedUnit.name,
-                    grade: grade,
                     deep_search: deepSearch,
-                    createdAt: new Date().toISOString()
+                    created_at: data.metadata?.created_at || new Date().toISOString(),
+                    summary_text: data.response
                 };
                 setSummaries(prev => [newSummary, ...prev]);
                 handleCloseModal();
@@ -241,11 +269,11 @@ export default function SummariesPage() {
         }
     };
 
-    const handleSendFollowUp = async () => {
-        if (!followUpQuestion.trim() || isAskingFollowUp || !activeSummary) return;
+    const handleSendFollowUp = async (overridePrompt?: string) => {
+        const question = overridePrompt || followUpQuestion;
+        if (!question.trim() || isAskingFollowUp || !activeSummary) return;
 
-        const question = followUpQuestion;
-        setFollowUpQuestion("");
+        if (!overridePrompt) setFollowUpQuestion("");
 
         const newUserMessage: Message = {
             role: "user",
@@ -258,29 +286,29 @@ export default function SummariesPage() {
 
         try {
             const token = localStorage.getItem("access_token");
-            const userStr = localStorage.getItem("user");
-            if (!userStr) return;
-
-            const user = JSON.parse(userStr);
-            const userId = user._id || user.id || user.user_id;
-
-            const response = await fetch("https://shiksha-gpt.com/api/message", {
+            const response = await fetch(`https://shiksha-gpt.com/api/summary/${activeSummary.id}/chat`, {
                 method: "POST",
                 headers: {
                     "Content-Type": "application/json",
                     "Authorization": `Bearer ${token}`
                 },
                 body: JSON.stringify({
-                    user_id: userId,
-                    prompt: `Context: This is a summary of ${activeSummary.unit} in ${activeSummary.subject}.\nSummary Content: ${activeSummary.content}\n\nUser Question: ${question}`,
-                    "deep-search": activeSummary.deep_search
+                    prompt: question,
+                    deep_search: false
                 })
             });
 
             if (response.ok) {
                 const data = await response.json();
-                // The chat API returns data.messages which includes the response
-                setMessages(prev => [...prev, data.messages[data.messages.length - 1]]);
+                // The API returns the current turn (user message + assistant response)
+                // We merge it with previous history to keep the conversation persistent
+                if (data.messages) {
+                    setMessages(prev => {
+                        // Filter out the optimistic message we added locally
+                        const history = prev.filter(m => m.content !== question || m.role !== 'user');
+                        return [...history, ...data.messages];
+                    });
+                }
             }
         } catch (error) {
             console.error("Failed to send follow up", error);
@@ -308,7 +336,7 @@ export default function SummariesPage() {
                         </button>
                         <div>
                             <h2 className="text-xl font-bold dark:text-white leading-tight">
-                                {activeSummary.title}
+                                {activeSummary.unit} Summary
                             </h2>
                             <div className="flex items-center gap-2 mt-1">
                                 <span className="text-[10px] font-bold text-primary bg-primary/10 px-2 py-0.5 rounded-full uppercase tracking-widest">
@@ -342,9 +370,21 @@ export default function SummariesPage() {
                                     code: ({ node, ...props }) => <code className="bg-slate-100 dark:bg-white/5 px-1.5 py-0.5 rounded text-sm font-mono text-primary" {...props} />
                                 }}
                             >
-                                {activeSummary.content.replace(/\\n/g, '\n')}
+                                {activeSummary.summary_text ? activeSummary.summary_text.replace(/\\n/g, '\n') : activeSummary.summary_preview?.replace(/\\n/g, '\n')}
                             </ReactMarkdown>
                         </div>
+
+                        {/* Suggested Actions */}
+                        {messages.length === 0 && !isAskingFollowUp && (
+                            <div className="mt-8 flex justify-end">
+                                <button
+                                    onClick={() => handleSendFollowUp("create a mnemonics of the summary")}
+                                    className="bg-primary text-white px-4 py-2 rounded-xl text-xs font-bold transition-all shadow-lg shadow-primary/20 hover:scale-[1.02] active:scale-95 flex items-center gap-2"
+                                >
+                                    <Sparkles className="w-3 h-3" /> create a mnemonics of the summary
+                                </button>
+                            </div>
+                        )}
                     </motion.div>
 
                     {/* Follow-up Messages */}
@@ -397,7 +437,7 @@ export default function SummariesPage() {
                                 className="flex-1 bg-transparent border-none outline-none resize-none py-2 text-[15px] text-slate-900 dark:text-white placeholder:text-slate-400"
                             />
                             <button
-                                onClick={handleSendFollowUp}
+                                onClick={() => handleSendFollowUp()}
                                 disabled={!followUpQuestion.trim() || isAskingFollowUp}
                                 className={`w-10 h-10 rounded-full flex items-center justify-center transition-all ${followUpQuestion.trim() && !isAskingFollowUp
                                     ? "bg-primary text-white shadow-lg shadow-primary/20"
@@ -450,7 +490,12 @@ export default function SummariesPage() {
                 </div>
             </div>
 
-            {summaries.length === 0 ? (
+            {isLoadingSummaries ? (
+                <div className="flex flex-col items-center justify-center py-20 text-center space-y-4">
+                    <Loader2 className="w-10 h-10 animate-spin text-primary/40" />
+                    <p className="text-slate-500 text-sm">Fetching your summaries...</p>
+                </div>
+            ) : summaries.length === 0 ? (
                 <div className="flex flex-col items-center justify-center py-20 text-center space-y-4 bg-white dark:bg-[#121214] border border-dashed border-slate-300 dark:border-slate-800 rounded-[32px]">
                     <div className="w-16 h-16 bg-primary/5 rounded-full flex items-center justify-center">
                         <FileText className="w-8 h-8 text-primary/40" />
@@ -483,7 +528,7 @@ export default function SummariesPage() {
                                         <FileText className="w-5 h-5" />
                                     </div>
                                     <div className="min-w-0">
-                                        <h3 className="font-bold dark:text-white truncate text-sm">{summary.title}</h3>
+                                        <h3 className="font-bold dark:text-white truncate text-sm">{summary.unit} Summary</h3>
                                         <div className="flex items-center gap-2 mt-0.5">
                                             <span className="text-[9px] font-extrabold text-primary uppercase tracking-widest">{summary.subject}</span>
                                             <span className="w-1 h-1 rounded-full bg-slate-300 dark:bg-slate-700"></span>
@@ -495,7 +540,7 @@ export default function SummariesPage() {
                                 <div className="flex items-center justify-between mt-auto">
                                     <div className="flex items-center gap-3 text-slate-400 text-[10px] font-bold transition-colors">
                                         <span className="flex items-center gap-1.5 whitespace-nowrap">
-                                            <Clock className="w-3 h-3" /> {new Date(summary.createdAt).toLocaleDateString()}
+                                            <Clock className="w-3 h-3" /> {new Date(summary.created_at).toLocaleDateString()}
                                         </span>
                                         {summary.deep_search && (
                                             <span className="flex items-center gap-1 text-indigo-500 bg-indigo-500/10 px-1.5 py-0.5 rounded italic">
@@ -622,6 +667,23 @@ export default function SummariesPage() {
                             </div>
                         </motion.div>
                     </>
+                )}
+            </AnimatePresence>
+
+            {/* Loading Overlay for fetching details */}
+            <AnimatePresence>
+                {isFetchingDetails && (
+                    <motion.div
+                        initial={{ opacity: 0 }}
+                        animate={{ opacity: 1 }}
+                        exit={{ opacity: 0 }}
+                        className="fixed inset-0 bg-black/30 backdrop-blur-sm z-[200] flex items-center justify-center"
+                    >
+                        <div className="bg-white dark:bg-[#1A1A1E] p-6 rounded-2xl shadow-xl flex flex-col items-center gap-4 border border-slate-200 dark:border-white/10">
+                            <Loader2 className="w-8 h-8 animate-spin text-primary" />
+                            <p className="text-sm font-bold dark:text-white">Loading summary...</p>
+                        </div>
+                    </motion.div>
                 )}
             </AnimatePresence>
         </div>
