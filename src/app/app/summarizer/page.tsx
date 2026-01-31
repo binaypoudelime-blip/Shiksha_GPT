@@ -60,7 +60,6 @@ export default function SummariesPage() {
     const [selectedSubject, setSelectedSubject] = useState<Subject | null>(null);
     const [selectedUnit, setSelectedUnit] = useState<Unit | null>(null);
     const [deepSearch, setDeepSearch] = useState(false);
-    const [grade, setGrade] = useState("10"); // Default grade
     const [isLoadingSummaries, setIsLoadingSummaries] = useState(false);
     const [isFetchingDetails, setIsFetchingDetails] = useState(false);
     const [messages, setMessages] = useState<Message[]>([]);
@@ -542,18 +541,7 @@ export default function SummariesPage() {
                                         <span className="flex items-center gap-1.5 whitespace-nowrap">
                                             <Clock className="w-3 h-3" /> {new Date(summary.created_at).toLocaleDateString()}
                                         </span>
-                                        {summary.deep_search && (
-                                            <span className="flex items-center gap-1 text-indigo-500 bg-indigo-500/10 px-1.5 py-0.5 rounded italic">
-                                                <Sparkles className="w-2.5 h-2.5" /> Deep
-                                            </span>
-                                        )}
                                     </div>
-                                    <button
-                                        onClick={(e) => handleDeleteSummary(e, summary.id)}
-                                        className="p-1.5 text-slate-300 hover:text-red-500 hover:bg-red-50 dark:hover:bg-red-500/10 rounded-lg transition-colors opacity-0 group-hover:opacity-100"
-                                    >
-                                        <Trash2 className="w-4 h-4" />
-                                    </button>
                                 </div>
                             </motion.div>
                         ))}
