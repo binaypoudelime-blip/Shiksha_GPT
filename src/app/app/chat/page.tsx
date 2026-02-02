@@ -23,6 +23,7 @@ import ReactMarkdown from 'react-markdown';
 import remarkGfm from 'remark-gfm';
 import remarkBreaks from 'remark-breaks';
 import { useSidebar } from "../../context/SidebarContext";
+import { useVoiceRecording } from "@/hooks/useVoiceRecording";
 
 interface Message {
     role: "user" | "assistant";
@@ -44,6 +45,13 @@ export default function ChatPage() {
     const router = useRouter();
     const searchParams = useSearchParams();
     const urlId = searchParams.get("id");
+
+    const { isRecording, isTranscribing, startRecording, stopRecording } = useVoiceRecording((transcript) => {
+        setInput(prev => {
+            const newValue = prev ? `${prev} ${transcript}` : transcript;
+            return newValue;
+        });
+    });
 
     const fetchConversationDetail = async (id: string) => {
         setIsLoading(true);
@@ -403,7 +411,7 @@ export default function ChatPage() {
                             value={input}
                             onChange={(e) => setInput(e.target.value)}
                             onKeyDown={handleKeyPress}
-                            placeholder="Ask ShikshaGPT"
+                            placeholder={isTranscribing ? "Transcribing..." : "Ask ShikshaGPT"}
                             className="w-full bg-transparent border-none outline-none resize-none px-3.5 py-2 text-[15px] overflow-y-auto text-slate-900 dark:text-white placeholder:text-slate-400 dark:placeholder:text-slate-500"
                         />
 
@@ -425,8 +433,17 @@ export default function ChatPage() {
                             </div>
 
                             <div className="flex items-center gap-1">
-                                <button className="p-1.5 hover:bg-slate-100 dark:hover:bg-white/5 rounded-full text-slate-400 dark:text-slate-500 transition-colors">
-                                    <Mic className="w-4 h-4" />
+                                <button
+                                    onClick={isRecording ? stopRecording : startRecording}
+                                    className={`p-1.5 rounded-full transition-all ${isRecording
+                                        ? "bg-red-500 text-white animate-pulse"
+                                        : isTranscribing
+                                            ? "bg-slate-100 dark:bg-white/5 text-slate-300 dark:text-slate-600 cursor-not-allowed"
+                                            : "hover:bg-slate-100 dark:hover:bg-white/5 text-slate-400 dark:text-slate-500"
+                                        }`}
+                                    disabled={isTranscribing}
+                                >
+                                    <Mic className={`w-4 h-4 ${isRecording ? 'scale-110' : ''}`} />
                                 </button>
                                 <button
                                     onClick={handleSend}

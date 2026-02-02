@@ -15,7 +15,8 @@ import {
     FileText,
     History,
     Sparkles,
-    Trash2
+    Trash2,
+    Eye
 } from "lucide-react";
 import { motion, AnimatePresence } from "framer-motion";
 import ReactMarkdown from "react-markdown";
@@ -43,6 +44,8 @@ interface Summary {
     summary_preview?: string;
     summary_text?: string;
     messages?: Message[];
+    views?: number;
+    last_viewed_at?: string;
 }
 
 interface Message {
@@ -179,6 +182,27 @@ export default function SummariesPage() {
     };
 
     const handleViewSummary = async (summary: Summary) => {
+        // Increment view count
+        try {
+            const token = localStorage.getItem("access_token");
+            fetch(`https://shiksha-gpt.com/api/summary/${summary.id}/view`, {
+                method: "POST",
+                headers: {
+                    "Authorization": `Bearer ${token}`
+                }
+            }).then(async (res) => {
+                if (res.ok) {
+                    const data = await res.json();
+                    setSummaries(prev => prev.map(s => s.id === summary.id ? { ...s, views: data.views, last_viewed_at: data.last_viewed_at } : s));
+                    if (activeSummary?.id === summary.id) {
+                        setActiveSummary(prev => prev ? { ...prev, views: data.views, last_viewed_at: data.last_viewed_at } : null);
+                    }
+                }
+            });
+        } catch (error) {
+            console.error("Failed to increment view count", error);
+        }
+
         if (!summary.summary_text) {
             setIsFetchingDetails(true);
             try {
@@ -193,7 +217,9 @@ export default function SummariesPage() {
                     const fullSummary = {
                         ...summary,
                         summary_text: data.summary_text,
-                        messages: data.messages
+                        messages: data.messages,
+                        views: data.views || summary.views,
+                        last_viewed_at: data.last_viewed_at || summary.last_viewed_at
                     };
                     // Update the list with full details
                     setSummaries(prev => prev.map(s => s.id === summary.id ? fullSummary : s));
@@ -540,6 +566,9 @@ export default function SummariesPage() {
                                     <div className="flex items-center gap-3 text-slate-400 text-[10px] font-bold transition-colors">
                                         <span className="flex items-center gap-1.5 whitespace-nowrap">
                                             <Clock className="w-3 h-3" /> {new Date(summary.created_at).toLocaleDateString()}
+                                        </span>
+                                        <span className="flex items-center gap-1.5 whitespace-nowrap">
+                                            <Eye className="w-3 h-3" /> {summary.views || 0} views
                                         </span>
                                     </div>
                                 </div>

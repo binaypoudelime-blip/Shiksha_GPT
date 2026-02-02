@@ -48,17 +48,28 @@ interface QuestionTypeConfig {
     color: string;
 }
 
+interface Question {
+    question_id: string;
+    question_type: "multiple_choice" | "truefalse" | "fillintheblanks" | "shortanswer";
+    question: string;
+    unit: string;
+    difficulty: string;
+    options?: string[];
+    correct_answer?: string;
+    explanation?: string;
+}
+
 interface PracticeTest {
     id: string;
     title: string;
     subject: string;
     units: string[];
-    totalQuestions: number;
-    time: string;
-    createdAt: string;
-    completed: boolean;
-    score: number | null;
-    attempts: number;
+    total_questions: number;
+    time?: string;
+    created_at: string;
+    times_attempted: number;
+    average_score: number | null;
+    questions?: Question[];
 }
 
 export default function PracticeTestPage() {
@@ -86,22 +97,51 @@ export default function PracticeTestPage() {
     const [isLoadingUnits, setIsLoadingUnits] = useState(false);
     const [isLoadingTests, setIsLoadingTests] = useState(false);
     const [isGenerating, setIsGenerating] = useState(false);
+    const [limit, setLimit] = useState(50);
+    const [skip, setSkip] = useState(0);
+    const [totalTests, setTotalTests] = useState(0);
 
-    // Initial load
-    useEffect(() => {
-        const savedTests = localStorage.getItem("shiksha_practice_tests");
-        if (savedTests) {
-            try {
-                setTests(JSON.parse(savedTests));
-            } catch (e) {
-                console.error("Failed to parse saved tests", e);
+    // Test taking state
+    const [activeTest, setActiveTest] = useState<PracticeTest | null>(null);
+    const [currentQuestionIndex, setCurrentQuestionIndex] = useState(0);
+    const [userAnswers, setUserAnswers] = useState<Record<string, string>>({});
+    const [showResults, setShowResults] = useState(false);
+    const [isReviewMode, setIsReviewMode] = useState(false);
+    const [isLoadingDetail, setIsLoadingDetail] = useState(false);
+
+    const fetchTests = async (currentSkip = skip, currentLimit = limit) => {
+        setIsLoadingTests(true);
+        try {
+            const token = localStorage.getItem("access_token");
+            const response = await fetch(`https://shiksha-gpt.com/api/practice-sets?limit=${currentLimit}&skip=${currentSkip}`, {
+                headers: { "Authorization": `Bearer ${token}` }
+            });
+            if (response.ok) {
+                const data = await response.json();
+                setTotalTests(data.count || 0);
+
+                const mappedTests: PracticeTest[] = data.practice_sets.map((ps: any) => ({
+                    ...ps,
+                    id: ps.id || ps._id,
+                    time: `${ps.total_questions * 2} min`
+                }));
+
+                if (currentSkip === 0) {
+                    setTests(mappedTests);
+                } else {
+                    setTests(prev => [...prev, ...mappedTests]);
+                }
             }
+        } catch (error) {
+            console.error("Failed to fetch practice tests", error);
+        } finally {
+            setIsLoadingTests(false);
         }
-    }, []);
+    };
 
     useEffect(() => {
-        localStorage.setItem("shiksha_practice_tests", JSON.stringify(tests));
-    }, [tests]);
+        fetchTests(0, limit);
+    }, []);
 
     const fetchSubjects = async () => {
         setIsLoadingSubjects(true);
@@ -204,36 +244,380 @@ export default function PracticeTestPage() {
 
     const totalQuestions = questionConfigs.reduce((acc, curr) => acc + curr.count, 0);
 
+    const resetTestState = () => {
+        setActiveTest(null);
+        setCurrentQuestionIndex(0);
+        setUserAnswers({});
+        setShowResults(false);
+        setIsReviewMode(false);
+    };
+
     const handleGeneratePracticeTest = async () => {
         if (!selectedSubject || selectedUnits.length === 0 || totalQuestions === 0) return;
 
         setIsGenerating(true);
         try {
-            // In a real implementation, we would call an API here.
-            // For now, we simulate the generation and save to local state.
-            await new Promise(resolve => setTimeout(resolve, 1500));
+            const token = localStorage.getItem("access_token");
+            const userStr = localStorage.getItem("user");
+            let userData: any = {};
+            if (userStr) {
+                try { userData = JSON.parse(userStr); } catch (e) { }
+            }
 
-            const newTest: PracticeTest = {
-                id: Date.now().toString(),
-                title: `${selectedUnits.map(u => u.name).join(", ")} Practice Test`,
-                subject: selectedSubject.name,
-                units: selectedUnits.map(u => u.name),
-                totalQuestions: totalQuestions,
-                time: `${totalQuestions * 2} min`,
-                createdAt: new Date().toISOString(),
-                completed: false,
-                score: null,
-                attempts: 0
+            const qConfigPayload = {
+                multiple_choice: questionConfigs.find(c => c.id === "mcq")?.count || 0,
+                truefalse: questionConfigs.find(c => c.id === "tf")?.count || 0,
+                fillintheblanks: questionConfigs.find(c => c.id === "fib")?.count || 0,
+                shortanswer: questionConfigs.find(c => c.id === "sa")?.count || 0
             };
 
-            setTests(prev => [newTest, ...prev]);
-            handleCloseModal();
+            const response = await fetch("https://shiksha-gpt.com/api/practice-set/generate", {
+                method: "POST",
+                headers: {
+                    "Content-Type": "application/json",
+                    "Authorization": `Bearer ${token}`
+                },
+                body: JSON.stringify({
+                    subject: selectedSubject.name.toLowerCase(),
+                    unit: selectedUnits.map(u => u.name.toLowerCase()),
+                    question_type: qConfigPayload,
+                    grade: userData.grade || "8",
+                    country: userData.country || "nepal",
+                    curriculum: userData.curriculum || "neb"
+                })
+            });
+
+            if (response.ok) {
+                const data = await response.json();
+                const newTest: PracticeTest = {
+                    id: data.practice_set_id,
+                    title: data.title,
+                    subject: data.metadata.subject,
+                    units: data.metadata.units,
+                    total_questions: data.metadata.total_questions,
+                    time: `${data.metadata.total_questions * 2} min`,
+                    created_at: new Date().toISOString(),
+                    times_attempted: 0,
+                    average_score: null,
+                    questions: data.questions
+                };
+
+                setTests(prev => [newTest, ...prev]);
+                handleCloseModal();
+                setActiveTest(newTest);
+                setCurrentQuestionIndex(0);
+                setUserAnswers({});
+                setShowResults(false);
+                setIsReviewMode(false);
+            }
         } catch (error) {
             console.error("Failed to generate practice test", error);
         } finally {
             setIsGenerating(false);
         }
     };
+
+    const handleStartTest = async (testId: string) => {
+        setIsLoadingDetail(true);
+        try {
+            const token = localStorage.getItem("access_token");
+            const response = await fetch(`https://shiksha-gpt.com/api/practice-set/${testId}?include_answers=false`, {
+                headers: { "Authorization": `Bearer ${token}` }
+            });
+            if (response.ok) {
+                const data = await response.json();
+                const testData: PracticeTest = {
+                    id: data._id,
+                    title: data.title,
+                    subject: data.metadata.subject,
+                    units: data.metadata.units,
+                    total_questions: data.metadata.total_questions,
+                    time: `${data.metadata.total_questions * 2} min`,
+                    created_at: data.created_at,
+                    times_attempted: data.times_attempted,
+                    average_score: data.average_score,
+                    questions: data.questions
+                };
+                setActiveTest(testData);
+                setCurrentQuestionIndex(0);
+                setUserAnswers({});
+                setShowResults(false);
+                setIsReviewMode(false);
+            }
+        } catch (error) {
+            console.error("Failed to fetch test details", error);
+        } finally {
+            setIsLoadingDetail(false);
+        }
+    };
+
+    const handleReviewTest = async (testId: string) => {
+        setIsLoadingDetail(true);
+        try {
+            const token = localStorage.getItem("access_token");
+            const response = await fetch(`https://shiksha-gpt.com/api/practice-set/${testId}?include_answers=true`, {
+                headers: { "Authorization": `Bearer ${token}` }
+            });
+            if (response.ok) {
+                const data = await response.json();
+                const testData: PracticeTest = {
+                    id: data._id,
+                    title: data.title,
+                    subject: data.metadata.subject,
+                    units: data.metadata.units,
+                    total_questions: data.metadata.total_questions,
+                    time: `${data.metadata.total_questions * 2} min`,
+                    created_at: data.created_at,
+                    times_attempted: data.times_attempted,
+                    average_score: data.average_score,
+                    questions: data.questions
+                };
+                setActiveTest(testData);
+                setCurrentQuestionIndex(0);
+                setUserAnswers({});
+                setShowResults(false);
+                setIsReviewMode(true);
+            }
+        } catch (error) {
+            console.error("Failed to fetch review details", error);
+        } finally {
+            setIsLoadingDetail(false);
+        }
+    };
+
+    const handleLoadMore = () => {
+        const nextSkip = skip + limit;
+        setSkip(nextSkip);
+        fetchTests(nextSkip, limit);
+    };
+
+    const handleAnswerChange = (questionId: string, answer: string) => {
+        setUserAnswers(prev => ({
+            ...prev,
+            [questionId]: answer
+        }));
+    };
+
+    if (activeTest && activeTest.questions && activeTest.questions.length > 0) {
+        const currentQuestion = activeTest.questions[currentQuestionIndex];
+        const isLastQuestion = currentQuestionIndex === activeTest.questions.length - 1;
+
+        if (showResults) {
+            return (
+                <div className="max-w-[600px] mx-auto p-4 py-8">
+                    <motion.div
+                        initial={{ opacity: 0, scale: 0.9 }}
+                        animate={{ opacity: 1, scale: 1 }}
+                        className="bg-white dark:bg-[#121214] border border-slate-200 dark:border-slate-800 rounded-[32px] p-8 text-center space-y-6 shadow-2xl"
+                    >
+                        <div className="w-16 h-16 bg-pink-500/10 rounded-full flex items-center justify-center mx-auto">
+                            <CheckCircle2 className="w-8 h-8 text-pink-500" />
+                        </div>
+                        <div className="space-y-1.5">
+                            <h2 className="text-2xl font-bold dark:text-white">Practice Set Completed!</h2>
+                            <p className="text-slate-500 text-sm">
+                                Excellent work. You should now review your answers to see how you did.
+                            </p>
+                        </div>
+
+                        <div className="flex gap-3">
+                            <button
+                                onClick={() => handleReviewTest(activeTest.id)}
+                                className="flex-1 bg-pink-500 text-white py-3.5 rounded-xl font-bold flex items-center justify-center gap-2 hover:bg-pink-600 transition-all text-sm"
+                            >
+                                Review All Answers
+                            </button>
+                            <button
+                                onClick={resetTestState}
+                                className="flex-1 border border-slate-200 dark:border-slate-800 dark:text-white py-3.5 rounded-xl font-bold transition-all text-sm"
+                            >
+                                Done for Now
+                            </button>
+                        </div>
+                    </motion.div>
+                </div>
+            );
+        }
+
+        return (
+            <div className="max-w-[800px] mx-auto p-4 space-y-6">
+                {/* Test Header */}
+                <div className="flex items-center justify-between">
+                    <button onClick={resetTestState} className="text-slate-500 hover:text-slate-700 dark:hover:text-white flex items-center gap-2 text-xs font-bold">
+                        <X className="w-3.5 h-3.5" /> {isReviewMode ? "Close Review" : "Exit Test"}
+                    </button>
+                    <div className="flex flex-col items-center">
+                        <span className="text-[10px] font-bold text-pink-500 bg-pink-500/10 px-2.5 py-1 rounded-full uppercase tracking-widest mb-1">
+                            {isReviewMode ? "Review Mode" : "Practice Mode"}
+                        </span>
+                        <div className="text-[10px] font-bold text-slate-400">
+                            Question {currentQuestionIndex + 1} of {activeTest.total_questions}
+                        </div>
+                    </div>
+                    {isReviewMode ? (
+                        <div className="w-8" />
+                    ) : (
+                        <div className="flex items-center gap-2 text-slate-500 text-xs font-bold">
+                            <Clock className="w-3.5 h-3.5" />
+                            {activeTest.time}
+                        </div>
+                    )}
+                </div>
+
+                {/* Progress Bar */}
+                <div className="w-full h-1.5 bg-slate-100 dark:bg-white/5 rounded-full overflow-hidden">
+                    <motion.div
+                        initial={{ width: 0 }}
+                        animate={{ width: `${((currentQuestionIndex + 1) / activeTest.total_questions) * 100}%` }}
+                        className="h-full bg-pink-500"
+                    />
+                </div>
+
+                {/* Question Area */}
+                <div className="space-y-8 py-4">
+                    <div className="space-y-4">
+                        <div className="flex items-start gap-4">
+                            <div className="px-3 py-1 bg-pink-500 text-white rounded-lg text-xs font-black shrink-0 mt-1">
+                                Q{currentQuestionIndex + 1}
+                            </div>
+                            <h2 className="text-xl font-bold dark:text-white leading-tight">
+                                {currentQuestion.question}
+                            </h2>
+                        </div>
+
+                        <div className="flex items-center gap-2 ml-14">
+                            <span className="text-[10px] font-bold uppercase tracking-wider text-slate-400 bg-slate-100 dark:bg-white/5 px-2 py-0.5 rounded">
+                                {currentQuestion.question_type.replace("_", " ")}
+                            </span>
+                            <span className={`text-[10px] font-bold uppercase tracking-wider px-2 py-0.5 rounded ${currentQuestion.difficulty === "easy" ? "text-emerald-500 bg-emerald-500/10" :
+                                currentQuestion.difficulty === "medium" ? "text-amber-500 bg-amber-500/10" :
+                                    "text-rose-500 bg-rose-500/10"
+                                }`}>
+                                {currentQuestion.difficulty}
+                            </span>
+                        </div>
+                    </div>
+
+                    <div className="ml-0 sm:ml-14 space-y-4">
+                        {/* Multiple Choice & True/False */}
+                        {(currentQuestion.question_type === "multiple_choice" || currentQuestion.question_type === "truefalse") && (
+                            <div className="grid grid-cols-1 gap-2.5">
+                                {(currentQuestion.options || (currentQuestion.question_type === "truefalse" ? ["True", "False"] : [])).map((option, idx) => {
+                                    const isSelected = userAnswers[currentQuestion.question_id] === option;
+                                    const isCorrect = isReviewMode && currentQuestion.correct_answer === option;
+
+                                    let styles = "border-slate-100 dark:border-white/5 bg-white dark:bg-white/5 dark:text-white";
+                                    if (isReviewMode) {
+                                        if (isCorrect) styles = "border-emerald-500 bg-emerald-500/5 text-emerald-600 dark:text-emerald-400";
+                                        else if (isSelected) styles = "border-rose-500 bg-rose-500/5 text-rose-600 dark:text-rose-400";
+                                        else styles = "opacity-50 border-slate-100 dark:border-white/5 bg-white dark:bg-white/5";
+                                    } else if (isSelected) {
+                                        styles = "border-pink-500 bg-pink-500/5 text-pink-500";
+                                    }
+
+                                    return (
+                                        <button
+                                            key={idx}
+                                            disabled={isReviewMode}
+                                            onClick={() => handleAnswerChange(currentQuestion.question_id, option)}
+                                            className={`w-full text-left p-4 rounded-2xl border-2 transition-all font-bold group flex items-center justify-between ${styles}`}
+                                        >
+                                            <div className="flex items-center gap-3">
+                                                <div className={`w-8 h-8 rounded-xl border-2 flex items-center justify-center shrink-0 text-sm transition-all ${isSelected ? "border-pink-500 bg-pink-500 text-white" : "border-slate-200 dark:border-white/10"
+                                                    }`}>
+                                                    {String.fromCharCode(65 + idx)}
+                                                </div>
+                                                <span className="text-sm">{option}</span>
+                                            </div>
+                                            {isReviewMode && isCorrect && <CheckCircle2 className="w-5 h-5 text-emerald-500" />}
+                                            {isReviewMode && isSelected && !isCorrect && <X className="w-5 h-5 text-rose-500" />}
+                                        </button>
+                                    );
+                                })}
+                            </div>
+                        )}
+
+                        {/* Fill in the Blanks */}
+                        {currentQuestion.question_type === "fillintheblanks" && (
+                            <div className="space-y-4">
+                                <input
+                                    type="text"
+                                    disabled={isReviewMode}
+                                    className="w-full bg-slate-50 dark:bg-white/5 border border-slate-200 dark:border-white/10 p-4 rounded-2xl outline-none focus:ring-2 focus:ring-pink-500/20 dark:text-white font-bold"
+                                    placeholder="Type your answer here..."
+                                    value={userAnswers[currentQuestion.question_id] || ""}
+                                    onChange={(e) => handleAnswerChange(currentQuestion.question_id, e.target.value)}
+                                />
+                                {isReviewMode && (
+                                    <div className="p-4 bg-emerald-500/5 border border-emerald-500/20 rounded-2xl">
+                                        <p className="text-[10px] font-bold text-emerald-500 uppercase tracking-widest mb-1">Correct Answer</p>
+                                        <p className="text-sm font-bold text-emerald-600 dark:text-emerald-400">{currentQuestion.correct_answer}</p>
+                                    </div>
+                                )}
+                            </div>
+                        )}
+
+                        {/* Short Answer */}
+                        {currentQuestion.question_type === "shortanswer" && (
+                            <div className="space-y-4">
+                                <textarea
+                                    disabled={isReviewMode}
+                                    rows={4}
+                                    className="w-full bg-slate-50 dark:bg-white/5 border border-slate-200 dark:border-white/10 p-4 rounded-2xl outline-none focus:ring-2 focus:ring-pink-500/20 dark:text-white font-bold resize-none"
+                                    placeholder="Write your response..."
+                                    value={userAnswers[currentQuestion.question_id] || ""}
+                                    onChange={(e) => handleAnswerChange(currentQuestion.question_id, e.target.value)}
+                                />
+                                {isReviewMode && (
+                                    <div className="p-4 bg-emerald-500/5 border border-emerald-500/20 rounded-2xl">
+                                        <p className="text-[10px] font-bold text-emerald-500 uppercase tracking-widest mb-1">Sample Correct Answer</p>
+                                        <p className="text-sm font-bold text-emerald-600 dark:text-emerald-400">{currentQuestion.correct_answer}</p>
+                                    </div>
+                                )}
+                            </div>
+                        )}
+
+                        {/* Explanation */}
+                        {isReviewMode && currentQuestion.explanation && (
+                            <div className="p-4 bg-blue-500/5 border border-blue-500/20 rounded-2xl">
+                                <p className="text-[10px] font-bold text-blue-500 uppercase tracking-widest mb-1">Explanation</p>
+                                <p className="text-sm text-slate-600 dark:text-slate-400 leading-relaxed font-medium">{currentQuestion.explanation}</p>
+                            </div>
+                        )}
+                    </div>
+                </div>
+
+                {/* Navigation Buttons */}
+                <div className="flex items-center justify-between pt-6 ml-0 sm:ml-14">
+                    <button
+                        onClick={() => setCurrentQuestionIndex(prev => prev - 1)}
+                        disabled={currentQuestionIndex === 0}
+                        className="px-6 py-3 rounded-xl font-bold text-sm text-slate-500 disabled:opacity-30 disabled:cursor-not-allowed hover:bg-slate-100 dark:hover:bg-white/5 transition-all flex items-center gap-2"
+                    >
+                        <ChevronLeft className="w-4 h-4" /> Previous
+                    </button>
+
+                    <div className="flex items-center gap-2">
+                        {isLastQuestion ? (
+                            <button
+                                onClick={() => isReviewMode ? resetTestState() : setShowResults(true)}
+                                className="bg-pink-500 text-white px-8 py-3 rounded-xl font-bold shadow-lg shadow-pink-500/20 hover:scale-[1.02] active:scale-95 transition-all text-sm"
+                            >
+                                {isReviewMode ? "Finish Review" : "Finish Test"}
+                            </button>
+                        ) : (
+                            <button
+                                onClick={() => setCurrentQuestionIndex(prev => prev + 1)}
+                                className="bg-slate-900 dark:bg-white text-white dark:text-slate-900 px-8 py-3 rounded-xl font-bold hover:scale-[1.02] active:scale-95 transition-all text-sm flex items-center gap-2"
+                            >
+                                Next Question <ChevronRight className="w-4 h-4" />
+                            </button>
+                        )}
+                    </div>
+                </div>
+            </div>
+        );
+    }
 
     return (
         <div className="max-w-[1200px] mx-auto space-y-8 p-4">
@@ -274,7 +658,12 @@ export default function PracticeTestPage() {
             </div>
 
             {/* Content Section */}
-            {tests.length === 0 ? (
+            {isLoadingTests && tests.length === 0 ? (
+                <div className="flex flex-col items-center justify-center py-20 text-center space-y-4">
+                    <Loader2 className="w-8 h-8 animate-spin text-primary" />
+                    <p className="text-slate-500 text-sm">Loading practice tests...</p>
+                </div>
+            ) : tests.length === 0 ? (
                 <div className="flex flex-col items-center justify-center py-20 text-center space-y-4 bg-white dark:bg-[#121214] border border-dashed border-slate-300 dark:border-slate-800 rounded-[32px]">
                     <div className="w-16 h-16 bg-pink-500/5 rounded-full flex items-center justify-center">
                         <ListChecks className="w-8 h-8 text-pink-500/40" />
@@ -285,54 +674,79 @@ export default function PracticeTestPage() {
                     </div>
                 </div>
             ) : (
-                <motion.div
-                    layout
-                    className={viewMode === "grid" ? "grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4" : "flex flex-col gap-3"}
-                >
-                    <AnimatePresence mode="popLayout">
-                        {tests.map((test) => (
-                            <motion.div
-                                layout
-                                initial={{ opacity: 0, y: 20 }}
-                                animate={{ opacity: 1, y: 0 }}
-                                exit={{ opacity: 0, scale: 0.95 }}
-                                key={test.id}
-                                className={`bg-white dark:bg-[#121214] border border-slate-200 dark:border-slate-800 rounded-2xl hover:border-pink-500/30 hover:shadow-xl group overflow-hidden transition-all duration-300 ${viewMode === "grid" ? "p-5" : "p-4 flex items-center justify-between"
-                                    }`}
+                <>
+                    <motion.div
+                        layout
+                        className={viewMode === "grid" ? "grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4" : "flex flex-col gap-3"}
+                    >
+                        <AnimatePresence mode="popLayout">
+                            {tests.map((test) => (
+                                <motion.div
+                                    layout
+                                    initial={{ opacity: 0, y: 20 }}
+                                    animate={{ opacity: 1, y: 0 }}
+                                    exit={{ opacity: 0, scale: 0.95 }}
+                                    key={test.id}
+                                    className={`bg-white dark:bg-[#121214] border border-slate-200 dark:border-slate-800 rounded-2xl hover:border-pink-500/30 hover:shadow-xl group overflow-hidden transition-all duration-300 ${viewMode === "grid" ? "p-5" : "p-4 flex items-center justify-between"
+                                        }`}
+                                >
+                                    <div className={viewMode === "grid" ? "space-y-4" : "flex items-center gap-6 flex-1 pr-6"}>
+                                        <div className={`flex items-center gap-3 ${viewMode === "grid" ? "" : "flex-1 min-w-0"}`}>
+                                            <div className={`flex-shrink-0 w-12 h-12 rounded-xl flex items-center justify-center transition-colors shadow-sm bg-pink-500/5 text-pink-500 group-hover:bg-pink-500 group-hover:text-white`}>
+                                                <ListChecks className="w-6 h-6" />
+                                            </div>
+                                            <div className="min-w-0">
+                                                <h3 className="font-bold dark:text-white truncate text-base mb-0.5">{test.title}</h3>
+                                                <span className="text-[10px] font-bold text-slate-400 dark:text-slate-500 uppercase tracking-widest block leading-none">{test.subject}</span>
+                                            </div>
+                                        </div>
+
+                                        <div className="flex flex-wrap items-center gap-y-2 gap-x-4 text-slate-500 text-xs font-medium">
+                                            <span className="flex items-center gap-2 whitespace-nowrap">
+                                                <BookOpen className="w-3.5 h-3.5 text-slate-400" /> {test.total_questions} Questions
+                                            </span>
+                                            <span className="flex items-center gap-2 whitespace-nowrap">
+                                                <Clock className="w-3.5 h-3.5 text-slate-400" /> {test.time}
+                                            </span>
+                                            {isLoadingDetail && <Loader2 className="w-3 h-3 animate-spin text-pink-500" />}
+                                        </div>
+                                    </div>
+
+                                    <div className={viewMode === "grid" ? "mt-5 pt-5 border-t border-slate-50 dark:border-white/5 flex items-center justify-between" : "flex items-center gap-4"}>
+                                        <div className="flex items-center gap-2 text-slate-500 text-xs font-bold">
+                                            <RotateCcw className="w-3.5 h-3.5" /> {test.times_attempted} Attempts
+                                        </div>
+                                        <div className="flex items-center gap-2">
+                                            <button
+                                                onClick={() => handleReviewTest(test.id)}
+                                                className="bg-slate-50 dark:bg-white/5 text-slate-600 dark:text-slate-400 hover:bg-slate-200 dark:hover:bg-white/10 transition-all duration-300 py-2.5 px-4 rounded-xl text-xs font-bold flex items-center justify-center gap-2 shadow-sm whitespace-nowrap"
+                                            >
+                                                Review
+                                            </button>
+                                            <button
+                                                onClick={() => handleStartTest(test.id)}
+                                                className="bg-slate-50 dark:bg-white/5 text-slate-600 dark:text-slate-400 hover:bg-pink-500 hover:text-white transition-all duration-300 py-2.5 px-6 rounded-xl text-xs font-bold flex items-center justify-center gap-2 shadow-sm whitespace-nowrap"
+                                            >
+                                                <Play className="w-3.5 h-3.5 fill-current" /> Start Test
+                                            </button>
+                                        </div>
+                                    </div>
+                                </motion.div>
+                            ))}
+                        </AnimatePresence>
+                    </motion.div>
+
+                    {tests.length < totalTests && (
+                        <div className="flex justify-center pt-8">
+                            <button
+                                onClick={handleLoadMore}
+                                className="px-8 py-3 bg-white dark:bg-[#121214] border border-slate-200 dark:border-slate-800 rounded-xl text-sm font-bold dark:text-white hover:border-pink-500/30 transition-all flex items-center gap-2"
                             >
-                                <div className={viewMode === "grid" ? "space-y-4" : "flex items-center gap-6 flex-1 pr-6"}>
-                                    <div className={`flex items-center gap-3 ${viewMode === "grid" ? "" : "flex-1 min-w-0"}`}>
-                                        <div className={`flex-shrink-0 w-12 h-12 rounded-xl flex items-center justify-center transition-colors shadow-sm bg-pink-500/5 text-pink-500 group-hover:bg-pink-500 group-hover:text-white`}>
-                                            <ListChecks className="w-6 h-6" />
-                                        </div>
-                                        <div className="min-w-0">
-                                            <h3 className="font-bold dark:text-white truncate text-base mb-0.5">{test.title}</h3>
-                                            <span className="text-[10px] font-bold text-slate-400 dark:text-slate-500 uppercase tracking-widest block leading-none">{test.subject}</span>
-                                        </div>
-                                    </div>
-
-                                    <div className="flex flex-wrap items-center gap-y-2 gap-x-4 text-slate-500 text-xs font-medium">
-                                        <span className="flex items-center gap-2 whitespace-nowrap">
-                                            <BookOpen className="w-3.5 h-3.5 text-slate-400" /> {test.totalQuestions} Questions
-                                        </span>
-                                        <span className="flex items-center gap-2 whitespace-nowrap">
-                                            <Clock className="w-3.5 h-3.5 text-slate-400" /> {test.time}
-                                        </span>
-                                    </div>
-                                </div>
-
-                                <div className={viewMode === "grid" ? "mt-5 pt-5 border-t border-slate-50 dark:border-white/5 flex items-center justify-between" : "flex items-center gap-4"}>
-                                    <div className="flex items-center gap-2 text-slate-500 text-xs font-bold">
-                                        <RotateCcw className="w-3.5 h-3.5" /> {test.attempts} Attempts
-                                    </div>
-                                    <button className="bg-slate-50 dark:bg-white/5 text-slate-600 dark:text-slate-400 hover:bg-pink-500 hover:text-white transition-all duration-300 py-2.5 px-6 rounded-xl text-xs font-bold flex items-center justify-center gap-2 shadow-sm whitespace-nowrap">
-                                        <Play className="w-3.5 h-3.5 fill-current" /> Start Test
-                                    </button>
-                                </div>
-                            </motion.div>
-                        ))}
-                    </AnimatePresence>
-                </motion.div>
+                                Load More Tests
+                            </button>
+                        </div>
+                    )}
+                </>
             )}
 
             {/* Generation Modal */}
