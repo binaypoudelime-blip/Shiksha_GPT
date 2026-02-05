@@ -31,7 +31,9 @@ interface Message {
     created_at: string;
 }
 
-export default function ChatPage() {
+import { Suspense } from "react";
+
+function ChatContent() {
     const [messages, setMessages] = useState<Message[]>([]);
     const [input, setInput] = useState("");
     const [isLoading, setIsLoading] = useState(false);
@@ -464,6 +466,18 @@ export default function ChatPage() {
                 </p>
             </footer>
         </div>
+    );
+}
+
+export default function ChatPage() {
+    return (
+        <Suspense fallback={
+            <div className="fixed inset-0 bg-white dark:bg-[#0C0C0E] flex items-center justify-center">
+                <img src="/logo.png" alt="Loading..." className="w-12 h-12 animate-pulse" />
+            </div>
+        }>
+            <ChatContent />
+        </Suspense>
     );
 }
 
