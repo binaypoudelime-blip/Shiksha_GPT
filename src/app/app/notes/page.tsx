@@ -25,23 +25,26 @@ import { motion, AnimatePresence } from "framer-motion";
 import DocumentEditor from "./_components/DocumentEditor";
 
 interface MaterialFolder {
-    id: string;
+    _id: string;
     name: string;
-    color: string;
-    createdAt: string;
-    type: 'folder';
+    user_id: string;
+    created_at: string;
+    updated_at: string;
 }
 
-interface MaterialFile {
-    id: string;
-    name: string;
-    type: 'file';
-    fileType: string;
-    size: string;
-    folderId: string | null;
-    createdAt: string;
-    url?: string;
-    content?: string; // For text documents
+interface MaterialResource {
+    _id: string;
+    title: string;
+    type: 'file' | 'note';
+    user_id: string;
+    folder_id: string | null;
+    content: string | null;
+    file_path: string | null;
+    file_url: string | null;
+    file_size: string | null;
+    mime_type: string | null;
+    created_at: string;
+    updated_at: string;
 }
 
 const FOLDER_COLORS = [
@@ -58,14 +61,9 @@ const FOLDER_COLORS = [
 const ALLOWED_EXTENSIONS = ['pdf', 'png', 'jpg', 'jpeg', 'svg', 'pptx', 'docx', 'xlsx'];
 
 export default function NotesPage() {
-    const [folders, setFolders] = useState<MaterialFolder[]>([
-        { id: '1', name: 'Mathematics', color: '#A78BFA', createdAt: new Date().toISOString(), type: 'folder' },
-        { id: '2', name: 'Physics Notes', color: '#60A5FA', createdAt: new Date().toISOString(), type: 'folder' },
-    ]);
-    const [files, setFiles] = useState<MaterialFile[]>([
-        { id: 'f1', name: 'Algebra_Basics.pdf', type: 'file', fileType: 'pdf', size: '1.2 MB', folderId: '1', createdAt: new Date().toISOString() },
-        { id: 'f2', name: 'Lab_Report.docx', type: 'file', fileType: 'docx', size: '450 KB', folderId: '2', createdAt: new Date().toISOString() },
-    ]);
+    const [folders, setFolders] = useState<MaterialFolder[]>([]);
+    const [resources, setResources] = useState<MaterialResource[]>([]);
+    const [isLoading, setIsLoading] = useState(false);
 
     const [viewMode, setViewMode] = useState<"grid" | "list">("grid");
     const [isFolderModalOpen, setIsFolderModalOpen] = useState(false);
@@ -85,78 +83,215 @@ export default function NotesPage() {
     const [isEditorOpen, setIsEditorOpen] = useState(false);
     const [activeDocument, setActiveDocument] = useState<{ id: string; name: string; content: string } | null>(null);
 
+    // Folder Rename State
+    const [editingFolder, setEditingFolder] = useState<MaterialFolder | null>(null);
+    const [editFolderName, setEditFolderName] = useState("");
+
+    // Folder Color logic (visual only for now as API doesn't store color)
+    const getFolderColor = (folderId: string) => {
+        const index = folderId.split('').reduce((acc, char) => acc + char.charCodeAt(0), 0);
+        return FOLDER_COLORS[index % FOLDER_COLORS.length].value;
+    };
+
+    const fetchFolders = async () => {
+        try {
+            const token = localStorage.getItem("access_token");
+            const response = await fetch("https://shiksha-gpt.com/api/folders/", {
+                headers: { "Authorization": `Bearer ${token}` }
+            });
+            if (response.ok) {
+                const data = await response.json();
+                setFolders(data);
+            }
+        } catch (error) {
+            console.error("Failed to fetch folders", error);
+        }
+    };
+
+    const fetchResources = async () => {
+        setIsLoading(true);
+        try {
+            const token = localStorage.getItem("access_token");
+            let url = "https://shiksha-gpt.com/api/resources/";
+            const params = new URLSearchParams();
+            if (selectedFolderId !== "all") {
+                params.append("folder_id", selectedFolderId);
+            }
+            if (params.toString()) {
+                url += `?${params.toString()}`;
+            }
+
+            const response = await fetch(url, {
+                headers: { "Authorization": `Bearer ${token}` }
+            });
+            if (response.ok) {
+                const data = await response.json();
+                setResources(data);
+            }
+        } catch (error) {
+            console.error("Failed to fetch resources", error);
+        } finally {
+            setIsLoading(false);
+        }
+    };
+
+    React.useEffect(() => {
+        fetchFolders();
+    }, []);
+
+    React.useEffect(() => {
+        fetchResources();
+    }, [selectedFolderId]);
+
     const handleCreateBlankDocument = () => {
         setActiveDocument(null);
         setIsEditorOpen(true);
     };
 
-    const handleEditDocument = (file: MaterialFile) => {
-        setActiveDocument({ id: file.id, name: file.name, content: file.content || "" });
+    const handleEditDocument = (resource: MaterialResource) => {
+        setActiveDocument({ id: resource._id, name: resource.title, content: resource.content || "" });
         setIsEditorOpen(true);
     };
 
-    const handleSaveDocument = (title: string, content: string) => {
-        if (activeDocument) {
-            // Update existing document
-            setFiles(prev => prev.map(f =>
-                f.id === activeDocument.id
-                    ? { ...f, name: title, content }
-                    : f
-            ));
-        } else {
-            // Create new document
-            const newFile: MaterialFile = {
-                id: Date.now().toString(),
-                name: title || "Untitled Document",
-                type: 'file',
-                fileType: 'doc',
-                size: (new Blob([content]).size / 1024).toFixed(1) + " KB",
-                folderId: selectedFolderId === "all" ? null : selectedFolderId,
-                createdAt: new Date().toISOString(),
+    const handleSaveDocument = async (title: string, content: string) => {
+        try {
+            const token = localStorage.getItem("access_token");
+            const payload = {
+                title: title || "Untitled Document",
+                type: "note",
+                folder_id: selectedFolderId === "all" ? null : selectedFolderId,
                 content: content
             };
-            setFiles(prev => [newFile, ...prev]);
+
+            const response = await fetch("https://shiksha-gpt.com/api/resources/note", {
+                method: "POST",
+                headers: {
+                    "Content-Type": "application/json",
+                    "Authorization": `Bearer ${token}`
+                },
+                body: JSON.stringify(payload)
+            });
+
+            if (response.ok) {
+                await fetchResources();
+                setIsEditorOpen(false);
+                setActiveDocument(null);
+            }
+        } catch (error) {
+            console.error("Failed to save document", error);
         }
-        setIsEditorOpen(false);
-        setActiveDocument(null);
     };
 
-    const handleCreateFolder = () => {
+    const handleCreateFolder = async () => {
         if (!newFolderName.trim()) return;
 
-        const newFolder: MaterialFolder = {
-            id: Date.now().toString(),
-            name: newFolderName.trim(),
-            color: selectedColor,
-            createdAt: new Date().toISOString(),
-            type: 'folder'
-        };
+        try {
+            const token = localStorage.getItem("access_token");
+            const response = await fetch("https://shiksha-gpt.com/api/folders/", {
+                method: "POST",
+                headers: {
+                    "Content-Type": "application/json",
+                    "Authorization": `Bearer ${token}`
+                },
+                body: JSON.stringify({ name: newFolderName.trim() })
+            });
 
-        setFolders(prev => [newFolder, ...prev]);
-        setNewFolderName("");
-        setIsFolderModalOpen(false);
+            if (response.ok) {
+                await fetchFolders();
+                setNewFolderName("");
+                setIsFolderModalOpen(false);
+            }
+        } catch (error) {
+            console.error("Failed to create folder", error);
+        }
     };
 
-    const handleFileUpload = (e: React.ChangeEvent<HTMLInputElement>) => {
+    const handleUpdateFolder = async (folderId: string, newName: string) => {
+        try {
+            const token = localStorage.getItem("access_token");
+            const response = await fetch(`https://shiksha-gpt.com/api/folders/${folderId}`, {
+                method: "PUT",
+                headers: {
+                    "Content-Type": "application/json",
+                    "Authorization": `Bearer ${token}`
+                },
+                body: JSON.stringify({ name: newName })
+            });
+
+            if (response.ok) {
+                await fetchFolders();
+                setEditingFolder(null);
+            }
+        } catch (error) {
+            console.error("Failed to update folder", error);
+        }
+    };
+
+    const handleDeleteFolder = async (folderId: string) => {
+        if (!confirm("Are you sure you want to delete this folder? All contents might be affected.")) return;
+        try {
+            const token = localStorage.getItem("access_token");
+            const response = await fetch(`https://shiksha-gpt.com/api/folders/${folderId}`, {
+                method: "DELETE",
+                headers: { "Authorization": `Bearer ${token}` }
+            });
+
+            if (response.ok) {
+                await fetchFolders();
+                if (selectedFolderId === folderId) setSelectedFolderId("all");
+            }
+        } catch (error) {
+            console.error("Failed to delete folder", error);
+        }
+    };
+
+    const handleFileUpload = async (e: React.ChangeEvent<HTMLInputElement>) => {
         const file = e.target.files?.[0];
         if (!file) return;
 
         const extension = file.name.split('.').pop()?.toLowerCase();
         if (extension && ALLOWED_EXTENSIONS.includes(extension)) {
-            const newFile: MaterialFile = {
-                id: Date.now().toString(),
-                name: file.name,
-                type: 'file',
-                fileType: extension,
-                size: (file.size / 1024 / 1024).toFixed(2) + " MB",
-                folderId: selectedFolderId === "all" ? null : selectedFolderId,
-                createdAt: new Date().toISOString()
-            };
-            setFiles(prev => [newFile, ...prev]);
+            try {
+                const token = localStorage.getItem("access_token");
+                const formData = new FormData();
+                formData.append("file", file);
+                if (selectedFolderId !== "all") {
+                    formData.append("folder_id", selectedFolderId);
+                }
+
+                const response = await fetch("https://shiksha-gpt.com/api/resources/upload", {
+                    method: "POST",
+                    headers: { "Authorization": `Bearer ${token}` },
+                    body: formData
+                });
+
+                if (response.ok) {
+                    await fetchResources();
+                    setIsUploadModalOpen(false);
+                }
+            } catch (error) {
+                console.error("Failed to upload file", error);
+            }
         } else {
             alert(`File type .${extension} is not supported. Please upload ${ALLOWED_EXTENSIONS.join(', ')}`);
         }
-        setIsUploadModalOpen(false);
+    };
+
+    const handleDeleteResource = async (resourceId: string) => {
+        if (!confirm("Are you sure you want to delete this item?")) return;
+        try {
+            const token = localStorage.getItem("access_token");
+            const response = await fetch(`https://shiksha-gpt.com/api/resources/${resourceId}`, {
+                method: "DELETE",
+                headers: { "Authorization": `Bearer ${token}` }
+            });
+
+            if (response.ok) {
+                await fetchResources();
+            }
+        } catch (error) {
+            console.error("Failed to delete resource", error);
+        }
     };
 
     const getFileIcon = (type: string) => {
@@ -175,16 +310,19 @@ export default function NotesPage() {
     };
 
     const filteredItems = [
-        ...folders.map(f => ({ ...f, itemType: 'folder' as const })),
-        ...files.map(f => ({ ...f, itemType: 'file' as const }))
+        ...folders.map(f => ({ ...f, itemType: 'folder' as const, title: f.name, id: f._id })),
+        ...resources.map(r => ({ ...r, itemType: 'file' as const, id: r._id, name: r.title }))
     ].filter(item => {
-        const matchesSearch = item.name.toLowerCase().includes(searchQuery.toLowerCase());
+        const matchesSearch = (item as any).title?.toLowerCase().includes(searchQuery.toLowerCase()) ||
+            (item as any).name?.toLowerCase().includes(searchQuery.toLowerCase());
         const matchesType = filterType === "all" ||
             (filterType === "folder" && item.itemType === "folder") ||
             (filterType === "file" && item.itemType === "file");
-        const matchesFolder = selectedFolderId === "all" ||
-            (item.itemType === "folder" && item.id === selectedFolderId) ||
-            (item.itemType === "file" && (item as any).folderId === selectedFolderId);
+
+        // When a folder is selected, we only show files inside it
+        const matchesFolder = selectedFolderId === "all"
+            ? item.itemType === "folder" || !(item as any).folder_id // Show folders and root files
+            : (item.itemType === "file" && (item as any).folder_id === selectedFolderId);
 
         return matchesSearch && matchesType && matchesFolder;
     });
@@ -239,10 +377,10 @@ export default function NotesPage() {
                             </div>
 
                             <button
-                                onClick={() => setIsUploadModalOpen(true)}
+                                onClick={() => setIsFolderModalOpen(true)}
                                 className="bg-primary text-white px-5 py-2.5 rounded-xl font-bold flex items-center gap-2 shadow-lg shadow-primary/20 hover:scale-[1.02] active:scale-95 transition-all text-sm"
                             >
-                                <Upload className="w-4 h-4" /> Upload Material
+                                <FolderPlus className="w-4 h-4" /> Create Folder
                             </button>
                         </div>
                     </motion.div>
@@ -282,18 +420,28 @@ export default function NotesPage() {
                             <div className="flex flex-wrap items-center gap-3">
                                 <div className="flex items-center gap-2">
                                     <span className="text-xs font-bold text-slate-400 whitespace-nowrap">Showing Materials for:</span>
-                                    <div className="relative">
-                                        <select
-                                            value={selectedFolderId}
-                                            onChange={(e) => setSelectedFolderId(e.target.value)}
-                                            className="appearance-none bg-white dark:bg-[#121214] border border-slate-200 dark:border-slate-800 rounded-lg text-[10px] font-bold px-3 py-1.5 pr-8 outline-none cursor-pointer dark:text-white uppercase tracking-wider"
-                                        >
-                                            <option value="all">All Subjects</option>
-                                            {folders.map(f => (
-                                                <option key={f.id} value={f.id}>{f.name}</option>
-                                            ))}
-                                        </select>
-                                        <ChevronDown className="w-3 h-3 absolute right-2.5 top-1/2 -translate-y-1/2 text-slate-400 pointer-events-none" />
+                                    <div className="flex items-center gap-2">
+                                        {selectedFolderId !== "all" && (
+                                            <button
+                                                onClick={() => setSelectedFolderId("all")}
+                                                className="flex items-center gap-1 px-2 py-1 bg-slate-100 dark:bg-white/5 hover:bg-slate-200 dark:hover:bg-white/10 rounded-lg text-[10px] font-bold text-primary transition-colors"
+                                            >
+                                                ← All
+                                            </button>
+                                        )}
+                                        <div className="relative">
+                                            <select
+                                                value={selectedFolderId}
+                                                onChange={(e) => setSelectedFolderId(e.target.value)}
+                                                className="appearance-none bg-white dark:bg-[#121214] border border-slate-200 dark:border-slate-800 rounded-lg text-[10px] font-bold px-3 py-1.5 pr-8 outline-none cursor-pointer dark:text-white uppercase tracking-wider"
+                                            >
+                                                <option value="all">All Folders</option>
+                                                {folders.map(f => (
+                                                    <option key={f._id} value={f._id}>{f.name}</option>
+                                                ))}
+                                            </select>
+                                            <ChevronDown className="w-3 h-3 absolute right-2.5 top-1/2 -translate-y-1/2 text-slate-400 pointer-events-none" />
+                                        </div>
                                     </div>
                                 </div>
 
@@ -323,13 +471,7 @@ export default function NotesPage() {
                                     <Plus className="w-3.5 h-3.5" />
                                     Create Document
                                 </button>
-                                <button
-                                    onClick={() => setIsFolderModalOpen(true)}
-                                    className="flex items-center gap-2 px-4 py-2 bg-white dark:bg-[#121214] border border-slate-200 dark:border-slate-800 rounded-xl text-xs font-bold dark:text-white hover:bg-slate-50 dark:hover:bg-white/5 transition-colors"
-                                >
-                                    <FolderPlus className="w-3.5 h-3.5 text-primary" />
-                                    Create Folder
-                                </button>
+
                             </div>
                         </div>
 
@@ -348,7 +490,7 @@ export default function NotesPage() {
                             ) : (
                                 <div
                                     className={viewMode === "grid"
-                                        ? "grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-5 xl:grid-cols-6 gap-4"
+                                        ? "grid grid-cols-3 sm:grid-cols-4 md:grid-cols-6 lg:grid-cols-7 xl:grid-cols-8 gap-3"
                                         : "flex flex-col gap-2"}
                                 >
                                     {/* Add Material Card (Grid Mode Only) */}
@@ -358,10 +500,10 @@ export default function NotesPage() {
                                             initial={{ opacity: 0, scale: 0.9 }}
                                             animate={{ opacity: 1, scale: 1 }}
                                             onClick={() => setIsUploadModalOpen(true)}
-                                            className="group bg-slate-50 dark:bg-slate-900/30 border-2 border-dashed border-slate-200 dark:border-slate-800 rounded-2xl p-4 flex flex-col items-center justify-center text-center space-y-2 cursor-pointer hover:border-primary/50 hover:bg-primary/5 transition-all h-[145px]"
+                                            className="group bg-slate-50 dark:bg-slate-900/30 border-2 border-dashed border-slate-200 dark:border-slate-800 rounded-2xl p-3 flex flex-col items-center justify-center text-center space-y-1.5 cursor-pointer hover:border-primary/50 hover:bg-primary/5 transition-all h-[115px]"
                                         >
-                                            <div className="w-10 h-10 bg-white dark:bg-[#1A1A1E] rounded-full flex items-center justify-center shadow-md group-hover:scale-110 transition-transform text-primary border border-slate-100 dark:border-slate-800">
-                                                <Upload className="w-5 h-5" />
+                                            <div className="w-8 h-8 bg-white dark:bg-[#1A1A1E] rounded-xl flex items-center justify-center shadow-md group-hover:scale-110 transition-transform text-primary border border-slate-100 dark:border-slate-800">
+                                                <Upload className="w-4 h-4" />
                                             </div>
                                             <div>
                                                 <p className="text-xs font-bold dark:text-white group-hover:text-primary transition-colors">Add Material</p>
@@ -377,10 +519,10 @@ export default function NotesPage() {
                                             initial={{ opacity: 0, scale: 0.9 }}
                                             animate={{ opacity: 1, scale: 1 }}
                                             onClick={handleCreateBlankDocument}
-                                            className="group bg-primary/5 dark:bg-primary/10 border-2 border-dashed border-primary/20 dark:border-primary/30 rounded-2xl p-4 flex flex-col items-center justify-center text-center space-y-2 cursor-pointer hover:border-primary/50 hover:bg-primary/10 transition-all h-[145px]"
+                                            className="group bg-primary/5 dark:bg-primary/10 border-2 border-dashed border-primary/20 dark:border-primary/30 rounded-2xl p-3 flex flex-col items-center justify-center text-center space-y-1.5 cursor-pointer hover:border-primary/50 hover:bg-primary/10 transition-all h-[115px]"
                                         >
-                                            <div className="w-10 h-10 bg-white dark:bg-primary/20 rounded-full flex items-center justify-center shadow-md group-hover:scale-110 transition-transform text-primary border border-primary/10">
-                                                <Plus className="w-5 h-5" />
+                                            <div className="w-8 h-8 bg-white dark:bg-primary/20 rounded-xl flex items-center justify-center shadow-md group-hover:scale-110 transition-transform text-primary border border-primary/10">
+                                                <Plus className="w-4 h-4" />
                                             </div>
                                             <div>
                                                 <p className="text-xs font-bold dark:text-white group-hover:text-primary transition-colors">Blank Document</p>
@@ -397,37 +539,61 @@ export default function NotesPage() {
                                             animate={{ opacity: 1, y: 0 }}
                                             exit={{ opacity: 0, scale: 0.95 }}
                                             onClick={() => {
-                                                if (item.itemType === 'file' && (item as MaterialFile).fileType === 'doc') {
-                                                    handleEditDocument(item as MaterialFile);
+                                                if (item.itemType === 'folder') {
+                                                    setSelectedFolderId(item.id);
+                                                } else if (item.itemType === 'file' && (item as any).type === 'note') {
+                                                    handleEditDocument(item as any);
+                                                } else if (item.itemType === 'file' && (item as any).file_url) {
+                                                    window.open(`https://shiksha-gpt.com${(item as any).file_url}`, '_blank');
                                                 }
                                             }}
-                                            className={`group bg-white dark:bg-[#121214] border border-slate-200 dark:border-slate-800 rounded-2xl hover:border-primary/50 hover:shadow-xl cursor-pointer overflow-hidden ${viewMode === "grid" ? "flex flex-col h-[145px]" : "p-3 flex items-center justify-between"
+                                            className={`group bg-white dark:bg-[#121214] border border-slate-200 dark:border-slate-800 rounded-2xl hover:border-primary/50 hover:shadow-xl cursor-pointer overflow-hidden ${viewMode === "grid" ? "flex flex-col h-[115px]" : "p-3 flex items-center justify-between"
                                                 }`}
                                             transition={{
                                                 layout: { duration: 0.4, ease: [0.23, 1, 0.32, 1] }
                                             }}
                                         >
                                             {viewMode === "grid" && (
-                                                <motion.div layout className="h-[85px] w-full bg-slate-50 dark:bg-white/5 flex items-center justify-center relative group-hover:bg-slate-100/50 dark:group-hover:bg-white/10 transition-colors">
+                                                <motion.div layout className="h-[65px] w-full bg-slate-50 dark:bg-white/5 flex items-center justify-center relative group-hover:bg-slate-100/50 dark:group-hover:bg-white/10 transition-colors">
                                                     {item.itemType === 'folder' ? (
                                                         <motion.div
                                                             layout
                                                             layoutId={`icon-${item.id}`}
-                                                            className="w-12 h-12 rounded-xl flex items-center justify-center relative"
-                                                            style={{ backgroundColor: `${item.color}15` }}
+                                                            className="w-9 h-9 rounded-lg flex items-center justify-center relative"
+                                                            style={{ backgroundColor: `${getFolderColor(item.id)}15` }}
                                                         >
-                                                            <Folder className="w-6 h-6" style={{ color: item.color }} fill={item.color} />
+                                                            <Folder className="w-5 h-5" style={{ color: getFolderColor(item.id) }} fill={getFolderColor(item.id)} />
                                                         </motion.div>
                                                     ) : (
-                                                        <motion.div layout layoutId={`icon-${item.id}`} className="w-10 h-10 bg-white dark:bg-[#1A1A1E] rounded-xl flex items-center justify-center shadow-md border border-slate-100 dark:border-slate-800">
-                                                            {getFileIcon((item as any).fileType)}
+                                                        <motion.div layout layoutId={`icon-${item.id}`} className="w-8 h-8 bg-white dark:bg-[#1A1A1E] rounded-lg flex items-center justify-center shadow-md border border-slate-100 dark:border-slate-800">
+                                                            {getFileIcon((item as any).mime_type?.split('/').pop() || (item as any).type === 'note' ? 'doc' : 'file')}
                                                         </motion.div>
                                                     )}
 
                                                     {/* Overlay Actions */}
                                                     <div className="absolute top-2 right-2 flex gap-1 opacity-0 group-hover:opacity-100 transition-opacity">
-                                                        <button className="p-1.5 bg-white/90 dark:bg-slate-800/90 backdrop-blur-sm hover:bg-white dark:hover:bg-slate-700 rounded-lg shadow-sm">
-                                                            <MoreVertical className="w-3.5 h-3.5 text-slate-500" />
+                                                        <button
+                                                            onClick={(e) => {
+                                                                e.stopPropagation();
+                                                                setEditingFolder(item as any);
+                                                                setEditFolderName((item as any).name || (item as any).title);
+                                                            }}
+                                                            className="p-1.5 bg-white/90 dark:bg-slate-800/90 backdrop-blur-sm hover:bg-white dark:hover:bg-primary/20 rounded-lg shadow-sm group/edit"
+                                                        >
+                                                            <Type className="w-3.5 h-3.5 text-slate-500 group-hover/edit:text-primary" />
+                                                        </button>
+                                                        <button
+                                                            onClick={(e) => {
+                                                                e.stopPropagation();
+                                                                if (item.itemType === 'folder') {
+                                                                    handleDeleteFolder(item.id);
+                                                                } else {
+                                                                    handleDeleteResource(item.id);
+                                                                }
+                                                            }}
+                                                            className="p-1.5 bg-white/90 dark:bg-slate-800/90 backdrop-blur-sm hover:bg-white dark:hover:bg-red-500/20 rounded-lg shadow-sm group/del"
+                                                        >
+                                                            <Trash2 className="w-3.5 h-3.5 text-slate-500 group-hover/del:text-red-500" />
                                                         </button>
                                                     </div>
                                                 </motion.div>
@@ -441,18 +607,18 @@ export default function NotesPage() {
                                                         </motion.div>
                                                     ) : (
                                                         <motion.div layout layoutId={`icon-${item.id}`} className="w-9 h-9 bg-slate-50 dark:bg-white/5 rounded-lg flex items-center justify-center group-hover:scale-105 transition-transform">
-                                                            {getFileIcon((item as any).fileType)}
+                                                            {getFileIcon((item as any).mime_type?.split('/').pop() || (item as any).type === 'note' ? 'doc' : 'file')}
                                                         </motion.div>
                                                     )
                                                 )}
                                                 <div className="min-w-0">
-                                                    <motion.h3 layout layoutId={`title-${item.id}`} className="text-[12px] font-bold dark:text-white truncate group-hover:text-primary transition-colors">{item.name}</motion.h3>
+                                                    <motion.h3 layout layoutId={`title-${item.id}`} className="text-[10px] font-bold dark:text-white truncate group-hover:text-primary transition-colors">{item.name}</motion.h3>
                                                     <motion.div layout className="flex items-center gap-2 mt-0.5">
                                                         {item.itemType === 'folder' && (
-                                                            <motion.div layout className="w-1 h-1 rounded-full shrink-0" style={{ backgroundColor: item.color }} />
+                                                            <motion.div layout className="w-1.5 h-1.5 rounded-full shrink-0" style={{ backgroundColor: getFolderColor(item.id) }} />
                                                         )}
-                                                        <motion.p layout className="text-[8px] text-slate-400 font-bold uppercase tracking-wider whitespace-nowrap">
-                                                            {item.itemType === 'folder' ? 'Folder' : (item as any).size} • {new Date(item.createdAt).toLocaleDateString()}
+                                                        <motion.p layout className="text-[7px] text-slate-400 font-bold uppercase tracking-wider whitespace-nowrap">
+                                                            {item.itemType === 'folder' ? 'Folder' : (item as any).file_size ? `${(parseInt((item as any).file_size) / 1024 / 1024).toFixed(2)} MB` : 'Note'} • {new Date((item as any).created_at).toLocaleDateString()}
                                                         </motion.p>
                                                     </motion.div>
                                                 </div>
@@ -460,14 +626,26 @@ export default function NotesPage() {
 
                                             {viewMode !== "grid" && (
                                                 <div className="flex items-center gap-1 opacity-0 group-hover:opacity-100 transition-opacity">
-                                                    <button className="p-2 hover:bg-slate-50 dark:hover:bg-white/10 rounded-lg text-slate-400">
-                                                        <Download className="w-4 h-4" />
-                                                    </button>
-                                                    <button className="p-2 hover:bg-slate-50 dark:hover:bg-white/10 rounded-lg text-slate-400 hover:text-red-500 transition-colors">
+                                                    {(item as any).file_url && (
+                                                        <a
+                                                            href={`https://shiksha-gpt.com${(item as any).file_url}`}
+                                                            target="_blank"
+                                                            rel="noopener noreferrer"
+                                                            className="p-2 hover:bg-slate-50 dark:hover:bg-white/10 rounded-lg text-slate-400"
+                                                            onClick={(e) => e.stopPropagation()}
+                                                        >
+                                                            <Download className="w-4 h-4" />
+                                                        </a>
+                                                    )}
+                                                    <button
+                                                        onClick={(e) => {
+                                                            e.stopPropagation();
+                                                            if (item.itemType === 'folder') handleDeleteFolder(item.id);
+                                                            else handleDeleteResource(item.id);
+                                                        }}
+                                                        className="p-2 hover:bg-slate-50 dark:hover:bg-white/10 rounded-lg text-slate-400 hover:text-red-500 transition-colors"
+                                                    >
                                                         <Trash2 className="w-4 h-4" />
-                                                    </button>
-                                                    <button className="p-2 hover:bg-slate-50 dark:hover:bg-white/10 rounded-lg text-slate-400">
-                                                        <MoreVertical className="w-4 h-4" />
                                                     </button>
                                                 </div>
                                             )}
@@ -614,8 +792,67 @@ export default function NotesPage() {
 
                             <div className="text-center">
                                 <p className="text-[10px] text-slate-400 italic">
-                                    Files will be saved in: <span className="text-primary font-bold">{selectedFolderId === 'all' ? 'All Subjects' : folders.find(f => f.id === selectedFolderId)?.name}</span>
+                                    Files will be saved in: <span className="text-primary font-bold">{selectedFolderId === 'all' ? 'Root' : folders.find(f => f._id === selectedFolderId)?.name}</span>
                                 </p>
+                            </div>
+                        </motion.div>
+                    </>
+                )}
+
+                {/* Edit Folder Modal */}
+                {editingFolder && (
+                    <>
+                        <motion.div
+                            initial={{ opacity: 0 }}
+                            animate={{ opacity: 1 }}
+                            exit={{ opacity: 0 }}
+                            onClick={() => setEditingFolder(null)}
+                            className="fixed inset-0 bg-black/30 backdrop-blur-sm z-[100] w-screen h-screen"
+                        />
+                        <motion.div
+                            initial={{ opacity: 0, scale: 0.9, y: 20 }}
+                            animate={{ opacity: 1, scale: 1, y: 0 }}
+                            exit={{ opacity: 0, scale: 0.9, y: 20 }}
+                            className="fixed left-1/2 top-1/2 -translate-x-1/2 -translate-y-1/2 w-[92%] max-w-[450px] bg-white dark:bg-[#1A1A1E] rounded-[32px] shadow-2xl z-[101] overflow-hidden border border-slate-200 dark:border-slate-800 p-6 space-y-6"
+                        >
+                            <div className="flex items-center justify-between">
+                                <h2 className="text-xl font-bold dark:text-white">Rename Folder</h2>
+                                <button
+                                    onClick={() => setEditingFolder(null)}
+                                    className="p-2 hover:bg-slate-100 dark:hover:bg-white/5 rounded-xl transition-colors text-slate-400"
+                                >
+                                    <X className="w-5 h-5" />
+                                </button>
+                            </div>
+
+                            <div className="space-y-4">
+                                <div className="space-y-2">
+                                    <label className="text-xs font-bold text-slate-400 uppercase tracking-wider">New Name</label>
+                                    <input
+                                        autoFocus
+                                        type="text"
+                                        value={editFolderName}
+                                        onChange={(e) => setEditFolderName(e.target.value)}
+                                        onKeyDown={(e) => e.key === 'Enter' && handleUpdateFolder(editingFolder._id, editFolderName)}
+                                        className="w-full bg-slate-50 dark:bg-white/5 border border-slate-200 dark:border-slate-800 rounded-2xl py-3 px-4 outline-none focus:ring-2 focus:ring-primary/20 focus:border-primary transition-all dark:text-white"
+                                    />
+                                </div>
+                            </div>
+
+                            <div className="flex gap-3 pt-2">
+                                <button
+                                    onClick={() => setEditingFolder(null)}
+                                    className="flex-1 py-3 px-4 rounded-2xl font-bold text-slate-500 hover:bg-slate-50 dark:hover:bg-white/5 transition-all text-sm"
+                                >
+                                    Cancel
+                                </button>
+                                <button
+                                    onClick={() => handleUpdateFolder(editingFolder._id, editFolderName)}
+                                    disabled={!editFolderName.trim()}
+                                    className="flex-1 py-3 px-4 bg-primary text-white rounded-2xl font-bold shadow-lg shadow-primary/20 hover:scale-[1.02] active:scale-95 transition-all text-sm disabled:opacity-50 disabled:hover:scale-100"
+                                >
+                                    Update Name
+                                </button>
                             </div>
                         </motion.div>
                     </>
