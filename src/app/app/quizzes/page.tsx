@@ -243,8 +243,8 @@ export default function QuizzesPage() {
                 if (questions && questions.length > 0) {
                     quizToStart.questions = questions;
 
-                    // Handle resuming from saved state
-                    if (data.state && data.state.responses) {
+                    // Handle resuming from saved state - only if not already completed
+                    if (!data.completed && data.state && data.state.responses) {
                         const responses = data.state.responses;
                         restoredResponses = responses.map((r: any) => ({
                             question_index: r.question_index,
@@ -704,8 +704,24 @@ export default function QuizzesPage() {
                                             <HelpCircle className="w-5 h-5" />
                                         </motion.div>
                                         <div className="min-w-0">
-                                            <motion.h3 layout layoutId={`quiz-title-${quiz.id}`} className="font-bold dark:text-white truncate text-sm mb-0.5">{quiz.title}</motion.h3>
+                                            <div className="flex items-center gap-2 mb-0.5">
+                                                <motion.h3 layout layoutId={`quiz-title-${quiz.id}`} className="font-bold dark:text-white truncate text-sm leading-none">{quiz.title}</motion.h3>
+                                            </div>
                                             <motion.span layout layoutId={`quiz-subject-${quiz.id}`} className="text-[9px] font-bold text-slate-400 dark:text-slate-500 uppercase tracking-widest block leading-none">{quiz.subject}</motion.span>
+                                            <div className="flex flex-wrap gap-1 mt-1.5">
+                                                {!quiz.completed && quiz.attempts > 0 && (
+                                                    <span className="flex-shrink-0 px-1.5 py-0.5 rounded-md bg-orange-500/10 text-orange-600 dark:text-orange-400 text-[7px] font-bold uppercase tracking-wider flex items-center gap-1 border border-orange-500/20 w-fit">
+                                                        <div className="w-1 h-1 rounded-full bg-orange-500 animate-pulse" />
+                                                        In Progress
+                                                    </span>
+                                                )}
+                                                {quiz.completed && (
+                                                    <span className="flex-shrink-0 px-1.5 py-0.5 rounded-md bg-green-500/10 text-green-600 dark:text-green-400 text-[7px] font-bold uppercase tracking-wider flex items-center gap-1 border border-green-500/20 w-fit">
+                                                        <CheckCircle2 className="w-2 h-2" />
+                                                        Completed
+                                                    </span>
+                                                )}
+                                            </div>
                                         </div>
                                     </motion.div>
 

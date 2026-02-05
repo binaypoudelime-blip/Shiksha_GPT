@@ -37,7 +37,8 @@ import {
     Mail,
     History as HistoryIcon,
     HelpCircle,
-    ListChecks
+    ListChecks,
+    Loader2
 } from "lucide-react";
 import { useTheme } from "next-themes";
 import { motion, AnimatePresence } from "framer-motion";
@@ -210,11 +211,41 @@ function NavItem({ item, isSidebarOpen, pathname, onClick }: { item: any, isSide
 export default function AppLayout({ children }: { children: React.ReactNode }) {
     return (
         <SidebarProvider>
-            <React.Suspense fallback={null}>
-                <AppContent>{children}</AppContent>
-            </React.Suspense>
+            <AppContent>{children}</AppContent>
         </SidebarProvider>
     );
+}
+
+function HistorySection({ urlId, conversations, toggleSidebar }: { urlId: string | null, conversations: any[], toggleSidebar: () => void }) {
+    return (
+        <div className="mt-2 mb-4 -mr-2 space-y-1">
+            <div className="flex items-center gap-2 px-4 py-1 mb-1">
+                <HistoryIcon className="w-3 h-3 text-slate-600 dark:text-slate-400" />
+                <span className="text-[10px] font-bold text-slate-500 dark:text-slate-500 uppercase tracking-wider">History</span>
+            </div>
+            <div className="max-h-[35vh] overflow-y-auto space-y-0.5">
+                {conversations.length > 0 ? (
+                    conversations.slice(0, 20).map((conv) => (
+                        <HistoryItem
+                            key={conv._id}
+                            conv={conv}
+                            urlId={urlId}
+                            onClick={() => { if (window.innerWidth < 1024) toggleSidebar(); }}
+                        />
+                    ))
+                ) : (
+                    <p className="px-2 py-1.5 text-[10px] text-slate-400 italic">No recent chats</p>
+                )}
+            </div>
+        </div>
+    );
+}
+
+function SidebarHistory({ conversations, toggleSidebar }: { conversations: any[], toggleSidebar: () => void }) {
+    const searchParams = useSearchParams();
+    const urlId = searchParams.get("id");
+
+    return <HistorySection urlId={urlId} conversations={conversations} toggleSidebar={toggleSidebar} />;
 }
 
 function AppContent({ children }: { children: React.ReactNode }) {
@@ -225,8 +256,6 @@ function AppContent({ children }: { children: React.ReactNode }) {
     const [conversations, setConversations] = useState<any[]>([]);
     const pathname = usePathname();
     const router = useRouter();
-    const searchParams = useSearchParams();
-    const urlId = searchParams.get("id");
     const { theme, setTheme } = useTheme();
 
     const fetchConversations = async (userId: string) => {
@@ -328,26 +357,13 @@ function AppContent({ children }: { children: React.ReactNode }) {
 
                                 {/* Conversation History Section */}
                                 {(item.href === "/app/chat" || item.label.includes("Chat")) && isSidebarOpen && (
-                                    <div className="mt-2 mb-4 -mr-2 space-y-1">
-                                        <div className="flex items-center gap-2 px-4 py-1 mb-1">
-                                            <HistoryIcon className="w-3 h-3 text-slate-600 dark:text-slate-400" />
-                                            <span className="text-[10px] font-bold text-slate-500 dark:text-slate-500 uppercase tracking-wider">History</span>
+                                    <React.Suspense fallback={
+                                        <div className="mt-2 mb-4 -mr-2 px-4 py-2">
+                                            <Loader2 className="w-3 h-3 animate-spin text-slate-400" />
                                         </div>
-                                        <div className="max-h-[35vh] overflow-y-auto space-y-0.5">
-                                            {conversations.length > 0 ? (
-                                                conversations.slice(0, 20).map((conv) => (
-                                                    <HistoryItem
-                                                        key={conv._id}
-                                                        conv={conv}
-                                                        urlId={urlId}
-                                                        onClick={() => { if (window.innerWidth < 1024) toggleSidebar(); }}
-                                                    />
-                                                ))
-                                            ) : (
-                                                <p className="px-2 py-1.5 text-[10px] text-slate-400 italic">No recent chats</p>
-                                            )}
-                                        </div>
-                                    </div>
+                                    }>
+                                        <SidebarHistory conversations={conversations} toggleSidebar={toggleSidebar} />
+                                    </React.Suspense>
                                 )}
                             </React.Fragment>
                         );

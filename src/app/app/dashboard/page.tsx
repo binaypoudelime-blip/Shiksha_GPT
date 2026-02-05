@@ -20,7 +20,9 @@ import {
     SquareStack,
     Flame,
     StickyNote,
-    X
+    X,
+    Loader2,
+    CheckCircle2
 } from "lucide-react";
 import { motion, AnimatePresence } from "framer-motion";
 
@@ -207,28 +209,117 @@ function ToolCard({ icon: Icon, label }: { icon: any, label: string }) {
 }
 
 function StickyNotes() {
-    const [notes, setNotes] = React.useState([
-        { id: 1, text: "Revise Physics Chapter 3", color: "bg-yellow-100 dark:bg-yellow-900/20" },
-        { id: 2, text: "Finish Al Digest materials", color: "bg-blue-100 dark:bg-blue-900/20" }
-    ]);
+    const [notes, setNotes] = React.useState<any[]>([]);
     const [newNote, setNewNote] = React.useState("");
+    const [isLoading, setIsLoading] = React.useState(false);
+    const [editingId, setEditingId] = React.useState<string | null>(null);
+    const [editingText, setEditingText] = React.useState("");
 
-    const addNote = () => {
-        if (!newNote.trim()) return;
-        const colors = [
-            "bg-yellow-100 dark:bg-yellow-900/20",
-            "bg-blue-100 dark:bg-blue-900/20",
-            "bg-green-100 dark:bg-green-900/20",
-            "bg-pink-100 dark:bg-pink-900/20",
-            "bg-purple-100 dark:bg-purple-900/20"
-        ];
-        const randomColor = colors[Math.floor(Math.random() * colors.length)];
-        setNotes([...notes, { id: Date.now(), text: newNote, color: randomColor }]);
-        setNewNote("");
+    const colors = [
+        "bg-yellow-100 dark:bg-yellow-900/20",
+        "bg-blue-100 dark:bg-blue-900/20",
+        "bg-green-100 dark:bg-green-900/20",
+        "bg-pink-100 dark:bg-pink-900/20",
+        "bg-purple-100 dark:bg-purple-900/20"
+    ];
+
+    const fetchNotes = async () => {
+        setIsLoading(true);
+        try {
+            const token = localStorage.getItem("access_token");
+            const response = await fetch("https://shiksha-gpt.com/api/todos/", {
+                headers: {
+                    "Authorization": `Bearer ${token}`
+                }
+            });
+            if (response.ok) {
+                const data = await response.json();
+                setNotes(data);
+            }
+        } catch (error) {
+            console.error("Failed to fetch notes", error);
+        } finally {
+            setIsLoading(false);
+        }
     };
 
-    const deleteNote = (id: number) => {
-        setNotes(notes.filter(n => n.id !== id));
+    React.useEffect(() => {
+        fetchNotes();
+    }, []);
+
+    const addNote = async () => {
+        if (!newNote.trim()) return;
+
+        try {
+            const token = localStorage.getItem("access_token");
+            const response = await fetch("https://shiksha-gpt.com/api/todos/", {
+                method: "POST",
+                headers: {
+                    "Content-Type": "application/json",
+                    "Authorization": `Bearer ${token}`
+                },
+                body: JSON.stringify({ text: newNote })
+            });
+
+            if (response.ok) {
+                setNewNote("");
+                fetchNotes(); // Refresh list as requested
+            }
+        } catch (error) {
+            console.error("Failed to add note", error);
+        }
+    };
+
+    const deleteNote = async (id: string) => {
+        try {
+            const token = localStorage.getItem("access_token");
+            const response = await fetch(`https://shiksha-gpt.com/api/todos/${id}`, {
+                method: "DELETE",
+                headers: {
+                    "Authorization": `Bearer ${token}`
+                }
+            });
+
+            if (response.ok) {
+                setNotes(notes.filter(n => n._id !== id));
+            }
+        } catch (error) {
+            console.error("Failed to delete note", error);
+        }
+    };
+
+    const updateNote = async (id: string, text: string, completed: boolean) => {
+        try {
+            const token = localStorage.getItem("access_token");
+            const response = await fetch(`https://shiksha-gpt.com/api/todos/${id}`, {
+                method: "PUT",
+                headers: {
+                    "Content-Type": "application/json",
+                    "Authorization": `Bearer ${token}`
+                },
+                body: JSON.stringify({
+                    text: text,
+                    completed: completed
+                })
+            });
+
+            if (response.ok) {
+                const updated = await response.json();
+                setNotes(notes.map(n => n._id === id ? updated : n));
+                setEditingId(null);
+            }
+        } catch (error) {
+            console.error("Failed to update note", error);
+        }
+    };
+
+    const toggleComplete = async (note: any) => {
+        updateNote(note._id, note.text, !note.completed);
+    };
+
+    const startEditing = (note: any) => {
+        setEditingId(note._id);
+        setEditingText(note.text);
     };
 
     return (
@@ -240,43 +331,129 @@ function StickyNotes() {
                 </div>
                 <button
                     onClick={addNote}
-                    className="p-1 px-2.5 bg-primary/10 text-primary rounded-lg text-xs font-bold hover:bg-primary hover:text-white transition-all flex items-center gap-1"
+                    disabled={!newNote.trim()}
+                    className="p-1 px-2.5 bg-primary/10 text-primary rounded-lg text-xs font-bold hover:bg-primary hover:text-white transition-all flex items-center gap-1 disabled:opacity-50"
                 >
                     <Plus className="w-3 h-3" /> Add
                 </button>
             </div>
 
-            <input
-                type="text"
-                value={newNote}
-                onChange={(e) => setNewNote(e.target.value)}
-                onKeyDown={(e) => e.key === 'Enter' && addNote()}
-                placeholder="Type a note and press enter..."
-                className="w-full bg-slate-50 dark:bg-slate-900 border border-slate-200 dark:border-slate-800 rounded-xl px-3 py-2.5 text-xs outline-none focus:ring-1 focus:ring-primary/30 dark:text-white transition-all"
-            />
+            <div className="relative">
+                <input
+                    type="text"
+                    value={newNote}
+                    onChange={(e) => setNewNote(e.target.value)}
+                    onKeyDown={(e) => e.key === 'Enter' && addNote()}
+                    placeholder="Type a note and press enter..."
+                    className="w-full bg-slate-50 dark:bg-slate-900 border border-slate-200 dark:border-slate-800 rounded-xl px-3 py-2 text-xs outline-none focus:ring-1 focus:ring-primary/30 dark:text-white transition-all"
+                />
+            </div>
 
             <div className="grid grid-cols-1 gap-3 max-h-[250px] overflow-y-auto pr-1 custom-scrollbar">
-                <AnimatePresence mode="popLayout">
-                    {notes.map(note => (
-                        <motion.div
-                            layout
-                            initial={{ opacity: 0, scale: 0.9, y: 10 }}
-                            animate={{ opacity: 1, scale: 1, y: 0 }}
-                            exit={{ opacity: 0, scale: 0.9, y: -10 }}
-                            key={note.id}
-                            className={`${note.color} p-4 rounded-2xl relative group border border-black/5 dark:border-white/5 shadow-sm`}
-                        >
-                            <p className="text-xs font-medium dark:text-slate-200 pr-6 leading-relaxed">{note.text}</p>
-                            <button
-                                onClick={() => deleteNote(note.id)}
-                                className="absolute top-3 right-3 text-slate-400 opacity-0 group-hover:opacity-100 transition-opacity hover:text-red-500"
+                {isLoading ? (
+                    <div className="flex justify-center py-8">
+                        <Loader2 className="w-5 h-5 animate-spin text-primary" />
+                    </div>
+                ) : (
+                    <AnimatePresence mode="popLayout" initial={false}>
+                        {notes.map((note, index) => (
+                            <motion.div
+                                layout
+                                initial={{ opacity: 0, scale: 0.9, y: 10 }}
+                                animate={{ opacity: 1, scale: 1, y: 0 }}
+                                exit={{ opacity: 0, scale: 0.9, y: -10 }}
+                                transition={{
+                                    layout: { duration: 0.2, ease: "easeOut" },
+                                    opacity: { duration: 0.15 }
+                                }}
+                                key={note._id}
+                                className={`${colors[index % colors.length]} p-3 rounded-2xl relative group border border-black/5 dark:border-white/5 shadow-sm ${note.completed ? 'opacity-60' : ''}`}
                             >
-                                <X className="w-3.5 h-3.5" />
-                            </button>
-                        </motion.div>
-                    ))}
-                </AnimatePresence>
-                {notes.length === 0 && (
+                                <AnimatePresence mode="wait">
+                                    {editingId === note._id ? (
+                                        <motion.div
+                                            key="editing"
+                                            initial={{ opacity: 0 }}
+                                            animate={{ opacity: 1 }}
+                                            exit={{ opacity: 0 }}
+                                            className="flex flex-col gap-2"
+                                            layout
+                                        >
+                                            <textarea
+                                                value={editingText}
+                                                onChange={(e) => setEditingText(e.target.value)}
+                                                onFocus={(e) => {
+                                                    const val = e.target.value;
+                                                    e.target.value = "";
+                                                    e.target.value = val;
+                                                }}
+                                                onKeyDown={(e) => {
+                                                    if (e.key === 'Enter' && !e.shiftKey) {
+                                                        e.preventDefault();
+                                                        updateNote(note._id, editingText, note.completed);
+                                                    }
+                                                    if (e.key === 'Escape') setEditingId(null);
+                                                }}
+                                                className="w-full bg-white/50 dark:bg-black/20 border border-black/10 dark:border-white/10 rounded-lg p-2 text-xs outline-none focus:ring-1 focus:ring-primary/30 dark:text-white resize-none"
+                                                rows={2}
+                                                autoFocus
+                                            />
+                                            <div className="flex justify-end gap-2">
+                                                <button
+                                                    onClick={() => setEditingId(null)}
+                                                    className="text-[10px] text-slate-500 font-bold hover:text-slate-700"
+                                                >
+                                                    Cancel
+                                                </button>
+                                                <button
+                                                    onClick={() => updateNote(note._id, editingText, note.completed)}
+                                                    className="text-[10px] text-primary font-bold hover:underline"
+                                                >
+                                                    Save
+                                                </button>
+                                            </div>
+                                        </motion.div>
+                                    ) : (
+                                        <motion.div
+                                            key="viewing"
+                                            initial={{ opacity: 0 }}
+                                            animate={{ opacity: 1 }}
+                                            exit={{ opacity: 0 }}
+                                            className="flex items-start gap-3"
+                                            layout
+                                        >
+                                            <button
+                                                onClick={() => toggleComplete(note)}
+                                                className={`mt-0.5 flex-shrink-0 w-4 h-4 rounded-md border-2 transition-colors flex items-center justify-center ${note.completed
+                                                    ? 'bg-primary border-primary'
+                                                    : 'border-black/10 dark:border-white/20'
+                                                    }`}
+                                            >
+                                                {note.completed && <CheckCircle2 className="w-3 h-3 text-white" />}
+                                            </button>
+                                            <p
+                                                onClick={() => startEditing(note)}
+                                                className={`flex-1 text-xs font-medium dark:text-slate-200 pr-6 leading-relaxed cursor-text ${note.completed ? 'line-through text-slate-500' : ''}`}
+                                            >
+                                                {note.text}
+                                            </p>
+                                            <button
+                                                onClick={(e) => {
+                                                    e.stopPropagation();
+                                                    deleteNote(note._id);
+                                                }}
+                                                className="absolute top-3 right-3 text-slate-400 opacity-0 group-hover:opacity-100 transition-opacity hover:text-red-500"
+                                            >
+                                                <X className="w-3.5 h-3.5" />
+                                            </button>
+                                        </motion.div>
+                                    )}
+                                </AnimatePresence>
+                            </motion.div>
+                        ))}
+                    </AnimatePresence>
+                )}
+                {!isLoading && notes.length === 0 && (
                     <div className="py-8 text-center bg-slate-50/50 dark:bg-slate-900/30 rounded-2xl border border-dashed border-slate-200 dark:border-slate-800">
                         <p className="text-[10px] text-slate-400 font-medium">No notes yet. Add one above!</p>
                     </div>
