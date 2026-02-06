@@ -78,6 +78,10 @@ export default function NotesPage() {
 
     // File Upload State
     const fileInputRef = useRef<HTMLInputElement>(null);
+    const [isUploading, setIsUploading] = useState(false);
+
+    // Toast State
+    const [toast, setToast] = useState<{ message: string; type: 'success' | 'error' } | null>(null);
 
     // Document Editor State
     const [isEditorOpen, setIsEditorOpen] = useState(false);
@@ -249,8 +253,17 @@ export default function NotesPage() {
         const file = e.target.files?.[0];
         if (!file) return;
 
+        // Client-side size check (10MB)
+        if (file.size > 10 * 1024 * 1024) {
+            setToast({ message: "File is too large. Maximum size is 10MB.", type: "error" });
+            setTimeout(() => setToast(null), 3000);
+            if (fileInputRef.current) fileInputRef.current.value = "";
+            return;
+        }
+
         const extension = file.name.split('.').pop()?.toLowerCase();
         if (extension && ALLOWED_EXTENSIONS.includes(extension)) {
+            setIsUploading(true);
             try {
                 const token = localStorage.getItem("access_token");
                 const formData = new FormData();
@@ -268,12 +281,27 @@ export default function NotesPage() {
                 if (response.ok) {
                     await fetchResources();
                     setIsUploadModalOpen(false);
+                    setToast({ message: "File uploaded successfully", type: "success" });
+                    setTimeout(() => setToast(null), 3000);
+                } else {
+                    setToast({ message: "Failed to upload file", type: "error" });
+                    setTimeout(() => setToast(null), 3000);
                 }
             } catch (error) {
                 console.error("Failed to upload file", error);
+                setToast({ message: "An error occurred during upload", type: "error" });
+                setTimeout(() => setToast(null), 3000);
+            } finally {
+                setIsUploading(false);
+                if (fileInputRef.current) fileInputRef.current.value = "";
             }
         } else {
-            alert(`File type .${extension} is not supported. Please upload ${ALLOWED_EXTENSIONS.join(', ')}`);
+            setToast({
+                message: `File type .${extension} is not supported. Please upload ${ALLOWED_EXTENSIONS.join(', ')}`,
+                type: "error"
+            });
+            setTimeout(() => setToast(null), 3000);
+            if (fileInputRef.current) fileInputRef.current.value = "";
         }
     };
 
@@ -662,18 +690,20 @@ export default function NotesPage() {
             <AnimatePresence>
                 {/* Create Folder Modal */}
                 {isFolderModalOpen && (
-                    <>
+                    <motion.div key="folder-modal-wrapper" className="relative z-[100]">
                         <motion.div
                             initial={{ opacity: 0 }}
                             animate={{ opacity: 1 }}
                             exit={{ opacity: 0 }}
                             onClick={() => setIsFolderModalOpen(false)}
-                            className="fixed inset-0 bg-black/30 backdrop-blur-sm z-[100] w-screen h-screen"
+                            key="folder-backdrop"
+                            className="fixed inset-0 bg-black/30 backdrop-blur-sm w-screen h-screen"
                         />
                         <motion.div
                             initial={{ opacity: 0, scale: 0.9, y: 20 }}
                             animate={{ opacity: 1, scale: 1, y: 0 }}
                             exit={{ opacity: 0, scale: 0.9, y: 20 }}
+                            key="folder-modal-content"
                             className="fixed left-1/2 top-1/2 -translate-x-1/2 -translate-y-1/2 w-[92%] max-w-[450px] bg-white dark:bg-[#1A1A1E] rounded-[32px] shadow-2xl z-[101] overflow-hidden border border-slate-200 dark:border-slate-800 p-6 space-y-6"
                         >
                             <div className="flex items-center justify-between">
@@ -737,58 +767,74 @@ export default function NotesPage() {
                                 </button>
                             </div>
                         </motion.div>
-                    </>
+                    </motion.div>
                 )}
 
                 {/* Upload Material Modal */}
                 {isUploadModalOpen && (
-                    <>
+                    <motion.div key="upload-modal-wrapper" className="relative z-[100]">
                         <motion.div
                             initial={{ opacity: 0 }}
                             animate={{ opacity: 1 }}
                             exit={{ opacity: 0 }}
-                            onClick={() => setIsUploadModalOpen(false)}
-                            className="fixed inset-0 bg-black/30 backdrop-blur-sm z-[100] w-screen h-screen"
+                            onClick={() => !isUploading && setIsUploadModalOpen(false)}
+                            key="upload-backdrop"
+                            className="fixed inset-0 bg-black/30 backdrop-blur-sm w-screen h-screen"
                         />
                         <motion.div
                             initial={{ opacity: 0, scale: 0.9, y: 20 }}
                             animate={{ opacity: 1, scale: 1, y: 0 }}
                             exit={{ opacity: 0, scale: 0.9, y: 20 }}
+                            key="upload-modal-content"
                             className="fixed left-1/2 top-1/2 -translate-x-1/2 -translate-y-1/2 w-[92%] max-w-[450px] bg-white dark:bg-[#1A1A1E] rounded-[32px] shadow-2xl z-[101] overflow-hidden border border-slate-200 dark:border-slate-800 p-6 space-y-6"
                         >
                             <div className="flex items-center justify-between">
                                 <h2 className="text-xl font-bold dark:text-white">Upload Material</h2>
                                 <button
-                                    onClick={() => setIsUploadModalOpen(false)}
-                                    className="p-2 hover:bg-slate-100 dark:hover:bg-white/5 rounded-xl transition-colors text-slate-400"
+                                    onClick={() => !isUploading && setIsUploadModalOpen(false)}
+                                    className={`p-2 rounded-xl transition-colors text-slate-400 ${isUploading ? "opacity-30 cursor-not-allowed" : "hover:bg-slate-100 dark:hover:bg-white/5"}`}
+                                    disabled={isUploading}
                                 >
                                     <X className="w-5 h-5" />
                                 </button>
                             </div>
 
                             <div
-                                onClick={() => fileInputRef.current?.click()}
-                                className="group border-2 border-dashed border-slate-200 dark:border-slate-800 rounded-3xl p-10 flex flex-col items-center justify-center text-center space-y-4 cursor-pointer hover:border-primary/50 hover:bg-primary/5 transition-all"
+                                onClick={() => !isUploading && fileInputRef.current?.click()}
+                                className={`group border-2 border-dashed rounded-3xl p-10 flex flex-col items-center justify-center text-center space-y-4 transition-all ${isUploading
+                                    ? "border-primary/50 bg-primary/5 cursor-wait"
+                                    : "border-slate-200 dark:border-slate-800 cursor-pointer hover:border-primary/50 hover:bg-primary/5"
+                                    }`}
                             >
-                                <div className="w-16 h-16 bg-primary/10 rounded-full flex items-center justify-center text-primary group-hover:scale-110 transition-transform">
-                                    <Upload className="w-8 h-8" />
+                                <div className={`w-16 h-16 bg-primary/10 rounded-full flex items-center justify-center text-primary ${!isUploading && "group-hover:scale-110"} transition-transform`}>
+                                    {isUploading ? (
+                                        <div className="w-8 h-8 border-4 border-primary/20 border-t-primary rounded-full animate-spin" />
+                                    ) : (
+                                        <Upload className="w-8 h-8" />
+                                    )}
                                 </div>
                                 <div>
-                                    <p className="font-bold dark:text-white">Click to select file</p>
-                                    <p className="text-xs text-slate-400 mt-1">Maximum file size 10MB</p>
+                                    <p className="font-bold dark:text-white">
+                                        {isUploading ? "Uploading..." : "Click to select file"}
+                                    </p>
+                                    <p className="text-xs text-slate-400 mt-1">
+                                        {isUploading ? "Please wait while we process your file" : "Maximum file size 10MB"}
+                                    </p>
                                 </div>
                             </div>
 
-                            <div className="space-y-3">
-                                <p className="text-[10px] font-bold text-slate-400 uppercase tracking-widest text-center">Supported Formats</p>
-                                <div className="flex flex-wrap justify-center gap-2">
-                                    {ALLOWED_EXTENSIONS.map((ext) => (
-                                        <span key={ext} className="px-2 py-1 bg-slate-100 dark:bg-white/5 rounded-md text-[9px] font-bold text-slate-500 uppercase">
-                                            .{ext}
-                                        </span>
-                                    ))}
+                            {!isUploading && (
+                                <div className="space-y-3">
+                                    <p className="text-[10px] font-bold text-slate-400 uppercase tracking-widest text-center">Supported Formats</p>
+                                    <div className="flex flex-wrap justify-center gap-2">
+                                        {ALLOWED_EXTENSIONS.map((ext) => (
+                                            <span key={ext} className="px-2 py-1 bg-slate-100 dark:bg-white/5 rounded-md text-[9px] font-bold text-slate-500 uppercase">
+                                                .{ext}
+                                            </span>
+                                        ))}
+                                    </div>
                                 </div>
-                            </div>
+                            )}
 
                             <div className="text-center">
                                 <p className="text-[10px] text-slate-400 italic">
@@ -796,23 +842,50 @@ export default function NotesPage() {
                                 </p>
                             </div>
                         </motion.div>
-                    </>
+                    </motion.div>
+                )}
+
+                {/* Toast Notification */}
+                {toast && (
+                    <motion.div
+                        key="toast-notification"
+                        initial={{ opacity: 0, y: 50, x: "-50%" }}
+                        animate={{ opacity: 1, y: 0, x: "-50%" }}
+                        exit={{ opacity: 0, y: 50, x: "-50%" }}
+                        className={`fixed bottom-8 left-1/2 z-[200] px-6 py-3 rounded-2xl shadow-2xl flex items-center gap-3 border ${toast.type === "success"
+                            ? "bg-emerald-500 border-emerald-400 text-white"
+                            : "bg-red-500 border-red-400 text-white"
+                            }`}
+                    >
+                        {toast.type === "success" ? (
+                            <div className="w-6 h-6 bg-white/20 rounded-full flex items-center justify-center">
+                                <Check className="w-4 h-4 text-white" />
+                            </div>
+                        ) : (
+                            <div className="w-6 h-6 bg-white/20 rounded-full flex items-center justify-center">
+                                <X className="w-4 h-4 text-white" />
+                            </div>
+                        )}
+                        <p className="text-sm font-bold tracking-wide">{toast.message}</p>
+                    </motion.div>
                 )}
 
                 {/* Edit Folder Modal */}
                 {editingFolder && (
-                    <>
+                    <motion.div key="edit-folder-wrapper" className="relative z-[100]">
                         <motion.div
                             initial={{ opacity: 0 }}
                             animate={{ opacity: 1 }}
                             exit={{ opacity: 0 }}
                             onClick={() => setEditingFolder(null)}
-                            className="fixed inset-0 bg-black/30 backdrop-blur-sm z-[100] w-screen h-screen"
+                            key="edit-folder-backdrop"
+                            className="fixed inset-0 bg-black/30 backdrop-blur-sm w-screen h-screen"
                         />
                         <motion.div
                             initial={{ opacity: 0, scale: 0.9, y: 20 }}
                             animate={{ opacity: 1, scale: 1, y: 0 }}
                             exit={{ opacity: 0, scale: 0.9, y: 20 }}
+                            key="edit-folder-modal-content"
                             className="fixed left-1/2 top-1/2 -translate-x-1/2 -translate-y-1/2 w-[92%] max-w-[450px] bg-white dark:bg-[#1A1A1E] rounded-[32px] shadow-2xl z-[101] overflow-hidden border border-slate-200 dark:border-slate-800 p-6 space-y-6"
                         >
                             <div className="flex items-center justify-between">
@@ -855,7 +928,7 @@ export default function NotesPage() {
                                 </button>
                             </div>
                         </motion.div>
-                    </>
+                    </motion.div>
                 )}
             </AnimatePresence>
 

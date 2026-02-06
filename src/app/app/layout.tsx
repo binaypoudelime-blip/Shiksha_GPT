@@ -254,6 +254,8 @@ function AppContent({ children }: { children: React.ReactNode }) {
     const [user, setUser] = useState<any>(null);
     const [mounted, setMounted] = useState(false);
     const [conversations, setConversations] = useState<any[]>([]);
+    const [streak, setStreak] = useState<number>(0);
+    const [isStreakHovered, setIsStreakHovered] = useState(false);
     const pathname = usePathname();
     const router = useRouter();
     const { theme, setTheme } = useTheme();
@@ -275,6 +277,23 @@ function AppContent({ children }: { children: React.ReactNode }) {
         }
     };
 
+    const fetchStreak = async () => {
+        try {
+            const token = localStorage.getItem("access_token");
+            const response = await fetch("https://shiksha-gpt.com/api/streaks/", {
+                headers: {
+                    "Authorization": `Bearer ${token}`
+                }
+            });
+            if (response.ok) {
+                const data = await response.json();
+                setStreak(data.current_streak);
+            }
+        } catch (error) {
+            console.error("Failed to fetch streak", error);
+        }
+    };
+
     React.useEffect(() => {
         setMounted(true);
         const storedUser = localStorage.getItem("user");
@@ -284,6 +303,7 @@ function AppContent({ children }: { children: React.ReactNode }) {
                 setUser(parsedUser);
                 const userId = parsedUser._id || parsedUser.id || parsedUser.user_id || "688c489cdb3cdc055588e6a3";
                 fetchConversations(userId);
+                fetchStreak();
             } catch (e) {
                 console.error("Failed to parse user from localStorage", e);
             }
@@ -399,10 +419,39 @@ function AppContent({ children }: { children: React.ReactNode }) {
                     </div>
 
                     <div className="flex items-center gap-3">
-                        <div className="flex items-center gap-1.5 px-3 py-1.5 bg-orange-50 dark:bg-orange-950/20 text-orange-600 rounded-full border border-orange-100 dark:border-orange-900/50">
-                            <Flame className="w-4 h-4 fill-orange-600" />
-                            <span className="text-xs font-bold">1</span>
-                        </div>
+                        <motion.div
+                            onMouseEnter={() => setIsStreakHovered(true)}
+                            onMouseLeave={() => setIsStreakHovered(false)}
+                            className="flex items-center gap-1.5 px-3 py-1.5 bg-orange-50 dark:bg-orange-950/20 text-orange-600 rounded-full border border-orange-100 dark:border-orange-900/50 cursor-pointer transition-all duration-300 relative group/streak"
+                        >
+                            <motion.div
+                                animate={isStreakHovered ? {
+                                    scale: [1, 1.2, 1, 1.3, 1],
+                                    rotate: [0, -10, 10, -10, 0],
+                                } : {}}
+                                transition={isStreakHovered ? {
+                                    duration: 0.5,
+                                    repeat: Infinity,
+                                    ease: "easeInOut"
+                                } : {}}
+                            >
+                                <Flame className="w-4 h-4 fill-orange-600" />
+                            </motion.div>
+                            <span className="text-xs font-bold">{streak}</span>
+
+                            {/* Embers for small streak */}
+                            <AnimatePresence>
+                                {isStreakHovered && [1, 2].map((i) => (
+                                    <motion.div
+                                        key={i}
+                                        initial={{ opacity: 0, y: 0, scale: 1 }}
+                                        animate={{ opacity: [0, 1, 0], y: -15, x: (i === 1 ? -10 : 10) }}
+                                        transition={{ duration: 0.6, repeat: Infinity, delay: i * 0.1 }}
+                                        className="absolute top-0 left-1/2 w-1 h-1 bg-orange-400 rounded-full"
+                                    />
+                                ))}
+                            </AnimatePresence>
+                        </motion.div>
 
                         <div className="relative group/theme">
                             <button

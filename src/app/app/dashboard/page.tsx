@@ -129,17 +129,7 @@ export default function DashboardPage() {
                 {/* Right Section: Widgets */}
                 <div className="lg:col-span-4 space-y-6">
                     {/* Streak Widget */}
-                    <div className="bg-white dark:bg-[#121214] border border-slate-200 dark:border-slate-800 rounded-3xl p-6 shadow-sm">
-                        <div className="flex items-center justify-between">
-                            <div className="flex items-center gap-3">
-                                <div className="p-2 bg-orange-50 dark:bg-orange-950/20 text-orange-600 rounded-xl">
-                                    <Flame className="w-6 h-6 fill-current" />
-                                </div>
-                                <span className="font-bold text-lg dark:text-white">1 day streak!</span>
-                            </div>
-                            <button className="text-[10px] font-bold text-slate-400 dark:text-slate-500 uppercase tracking-wider hover:text-primary transition-colors">View Leaderboard</button>
-                        </div>
-                    </div>
+                    <StreakWidget />
 
                     <StickyNotes />
 
@@ -191,6 +181,120 @@ export default function DashboardPage() {
                         <button className="w-full text-center text-primary text-xs font-bold hover:underline">View All</button>
                     </div>
                 </div>
+            </div>
+        </div>
+    );
+}
+
+function StreakWidget() {
+    const [streakData, setStreakData] = React.useState<any>(null);
+    const [isLoading, setIsLoading] = React.useState(true);
+    const [isHovered, setIsHovered] = React.useState(false);
+
+    React.useEffect(() => {
+        const fetchStreak = async () => {
+            try {
+                const token = localStorage.getItem("access_token");
+                const response = await fetch("https://shiksha-gpt.com/api/streaks/", {
+                    headers: {
+                        "Authorization": `Bearer ${token}`
+                    }
+                });
+                if (response.ok) {
+                    const data = await response.json();
+                    setStreakData(data);
+                }
+            } catch (error) {
+                console.error("Failed to fetch streak", error);
+            } finally {
+                setIsLoading(false);
+            }
+        };
+        fetchStreak();
+    }, []);
+
+    return (
+        <div
+            className="bg-white dark:bg-[#121214] border border-slate-200 dark:border-slate-800 rounded-3xl p-6 shadow-sm overflow-hidden"
+            onMouseEnter={() => setIsHovered(true)}
+            onMouseLeave={() => setIsHovered(false)}
+        >
+            <div className="flex items-center justify-between">
+                <div className="flex items-center gap-3">
+                    <div className="relative">
+                        {/* Background glow when hovered */}
+                        <AnimatePresence>
+                            {isHovered && (
+                                <motion.div
+                                    initial={{ opacity: 0, scale: 0.5 }}
+                                    animate={{ opacity: 1, scale: 1.5 }}
+                                    exit={{ opacity: 0, scale: 0.5 }}
+                                    className="absolute inset-0 bg-orange-500/20 blur-xl rounded-full"
+                                />
+                            )}
+                        </AnimatePresence>
+
+                        <div className={`p-2 rounded-xl transition-all duration-300 z-10 relative bg-orange-50 dark:bg-orange-950/20 text-orange-600 ${isHovered ? "scale-110" : ""
+                            }`}>
+                            <motion.div
+                                animate={isHovered ? {
+                                    scale: [1, 1.15, 1, 1.2, 1],
+                                    rotate: [0, -8, 8, -8, 0],
+                                    y: [0, -2, 0, -3, 0],
+                                } : {}}
+                                transition={isHovered ? {
+                                    duration: 0.5,
+                                    repeat: Infinity,
+                                    ease: "easeInOut"
+                                } : {}}
+                            >
+                                <Flame className="w-6 h-6 fill-current" />
+                            </motion.div>
+
+                            {/* Animated Embers */}
+                            <AnimatePresence>
+                                {isHovered && [1, 2, 3].map((i) => (
+                                    <motion.div
+                                        key={i}
+                                        initial={{ opacity: 0, y: 0, x: 0, scale: 0.8 }}
+                                        animate={{
+                                            opacity: [0, 1, 0],
+                                            y: -20 - (i * 10),
+                                            x: (Math.random() - 0.5) * 30,
+                                            scale: [0.8, 1.2, 0.5]
+                                        }}
+                                        transition={{
+                                            duration: 0.8 + (i * 0.2),
+                                            repeat: Infinity,
+                                            delay: i * 0.2
+                                        }}
+                                        className="absolute top-0 left-1/2 w-1.5 h-1.5 bg-orange-400 rounded-full blur-[1px]"
+                                    />
+                                ))}
+                            </AnimatePresence>
+                        </div>
+                    </div>
+
+                    <div className="flex flex-col">
+                        <span className="font-bold text-lg dark:text-white">
+                            {isLoading ? (
+                                <div className="h-6 w-24 bg-slate-100 dark:bg-slate-800 animate-pulse rounded-md" />
+                            ) : (
+                                `${streakData?.current_streak || 0} day streak!`
+                            )}
+                        </span>
+                        {isHovered && streakData && (
+                            <motion.span
+                                initial={{ opacity: 0, y: 5 }}
+                                animate={{ opacity: 1, y: 0 }}
+                                className="text-[10px] text-orange-500 font-bold"
+                            >
+                                Keep it up! 🔥
+                            </motion.span>
+                        )}
+                    </div>
+                </div>
+                <button className="text-[10px] font-bold text-slate-400 dark:text-slate-500 uppercase tracking-wider hover:text-primary transition-colors">View Leaderboard</button>
             </div>
         </div>
     );
