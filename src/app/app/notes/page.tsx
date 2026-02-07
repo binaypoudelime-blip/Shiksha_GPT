@@ -322,6 +322,42 @@ export default function NotesPage() {
         }
     };
 
+    const handleDownload = async (fileUrl: string, fileName: string) => {
+        try {
+            const token = localStorage.getItem("access_token");
+
+            const response = await fetch("/api/proxy/file-download", {
+                method: "POST",
+                headers: {
+                    "Content-Type": "application/json",
+                    "Authorization": `Bearer ${token}`
+                },
+                body: JSON.stringify({ fileUrl })
+            });
+
+            if (!response.ok) {
+                console.error("Download failed:", response.status, response.statusText);
+                setToast({ message: "Failed to download file.", type: "error" });
+                setTimeout(() => setToast(null), 3000);
+                return;
+            }
+
+            const blob = await response.blob();
+            const url = window.URL.createObjectURL(blob);
+            const a = document.createElement("a");
+            a.href = url;
+            a.download = fileName;
+            document.body.appendChild(a);
+            a.click();
+            window.URL.revokeObjectURL(url);
+            document.body.removeChild(a);
+        } catch (error) {
+            console.error("Download error:", error);
+            setToast({ message: "An error occurred during download.", type: "error" });
+            setTimeout(() => setToast(null), 3000);
+        }
+    };
+
     const getFileIcon = (type: string) => {
         switch (type) {
             case 'pdf': return <FileText className="w-5 h-5 text-red-500" />;
@@ -572,7 +608,7 @@ export default function NotesPage() {
                                                 } else if (item.itemType === 'file' && (item as any).type === 'note') {
                                                     handleEditDocument(item as any);
                                                 } else if (item.itemType === 'file' && (item as any).file_url) {
-                                                    window.open(`https://shiksha-gpt.com${(item as any).file_url}`, '_blank');
+                                                    handleDownload((item as any).file_url, (item as any).name || 'download');
                                                 }
                                             }}
                                             className={`group bg-white dark:bg-[#121214] border border-slate-200 dark:border-slate-800 rounded-2xl hover:border-primary/50 hover:shadow-xl cursor-pointer overflow-hidden ${viewMode === "grid" ? "flex flex-col h-[115px]" : "p-3 flex items-center justify-between"
@@ -655,15 +691,15 @@ export default function NotesPage() {
                                             {viewMode !== "grid" && (
                                                 <div className="flex items-center gap-1 opacity-0 group-hover:opacity-100 transition-opacity">
                                                     {(item as any).file_url && (
-                                                        <a
-                                                            href={`https://shiksha-gpt.com${(item as any).file_url}`}
-                                                            target="_blank"
-                                                            rel="noopener noreferrer"
+                                                        <button
+                                                            onClick={(e) => {
+                                                                e.stopPropagation();
+                                                                handleDownload((item as any).file_url, (item as any).name || 'download');
+                                                            }}
                                                             className="p-2 hover:bg-slate-50 dark:hover:bg-white/10 rounded-lg text-slate-400"
-                                                            onClick={(e) => e.stopPropagation()}
                                                         >
                                                             <Download className="w-4 h-4" />
-                                                        </a>
+                                                        </button>
                                                     )}
                                                     <button
                                                         onClick={(e) => {
