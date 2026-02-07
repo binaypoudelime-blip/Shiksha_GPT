@@ -19,6 +19,8 @@ import {
     CheckCircle2
 } from "lucide-react";
 import { motion, AnimatePresence } from "framer-motion";
+import { API_BASE_URL } from "@/lib/constants";
+
 
 interface Explainer {
     _id: string;
@@ -66,7 +68,7 @@ export default function ExplainersPage() {
         setIsLoading(true);
         try {
             const token = localStorage.getItem("access_token");
-            const response = await fetch("https://shiksha-gpt.com/api/explainer/", {
+            const response = await fetch(`${API_BASE_URL}/api/explainer/`, {
                 headers: {
                     "Authorization": `Bearer ${token}`
                 }
@@ -86,7 +88,7 @@ export default function ExplainersPage() {
         setIsLoadingSubjects(true);
         try {
             const token = localStorage.getItem("access_token");
-            const response = await fetch("https://shiksha-gpt.com/api/subjects/", {
+            const response = await fetch(`${API_BASE_URL}/api/subjects/`, {
                 headers: {
                     "Authorization": `Bearer ${token}`
                 }
@@ -106,7 +108,7 @@ export default function ExplainersPage() {
         setIsLoadingUnits(true);
         try {
             const token = localStorage.getItem("access_token");
-            const response = await fetch(`https://shiksha-gpt.com/api/subjects/${subjectId}/topics`, {
+            const response = await fetch(`${API_BASE_URL}/api/subjects/${subjectId}/topics`, {
                 headers: {
                     "Authorization": `Bearer ${token}`
                 }

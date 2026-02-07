@@ -19,6 +19,8 @@ import {
     Eye
 } from "lucide-react";
 import { motion, AnimatePresence } from "framer-motion";
+import { API_BASE_URL } from "@/lib/constants";
+
 
 interface Subject {
     _id: string;
@@ -76,7 +78,7 @@ export default function FlashcardsPage() {
         setIsLoadingFlashcards(true);
         try {
             const token = localStorage.getItem("access_token");
-            const response = await fetch("https://shiksha-gpt.com/api/flashcards?limit=50&skip=0", {
+            const response = await fetch(`${API_BASE_URL}/api/flashcards?limit=50&skip=0`, {
                 headers: {
                     "Authorization": `Bearer ${token}`
                 }
@@ -100,7 +102,7 @@ export default function FlashcardsPage() {
         setIsLoadingSubjects(true);
         try {
             const token = localStorage.getItem("access_token");
-            const response = await fetch("https://shiksha-gpt.com/api/subjects/", {
+            const response = await fetch(`${API_BASE_URL}/api/subjects/`, {
                 headers: {
                     "Authorization": `Bearer ${token}`
                 }
@@ -120,7 +122,7 @@ export default function FlashcardsPage() {
         setIsLoadingUnits(true);
         try {
             const token = localStorage.getItem("access_token");
-            const response = await fetch(`https://shiksha-gpt.com/api/subjects/${subjectId}/topics`, {
+            const response = await fetch(`${API_BASE_URL}/api/subjects/${subjectId}/topics`, {
                 headers: {
                     "Authorization": `Bearer ${token}`
                 }
@@ -168,7 +170,7 @@ export default function FlashcardsPage() {
         // Increment view count
         try {
             const token = localStorage.getItem("access_token");
-            fetch(`https://shiksha-gpt.com/api/flashcard/${set.id}/view`, {
+            fetch(`${API_BASE_URL}/api/flashcard/${set.id}/view`, {
                 method: "POST",
                 headers: {
                     "Authorization": `Bearer ${token}`
@@ -189,7 +191,7 @@ export default function FlashcardsPage() {
             setIsFetchingDetails(true);
             try {
                 const token = localStorage.getItem("access_token");
-                const response = await fetch(`https://shiksha-gpt.com/api/flashcard/${set.id}`, {
+                const response = await fetch(`${API_BASE_URL}/api/flashcard/${set.id}`, {
                     headers: {
                         "Authorization": `Bearer ${token}`
                     }
@@ -259,7 +261,7 @@ export default function FlashcardsPage() {
             }
 
             // Using new flashcard generation API
-            const response = await fetch("https://shiksha-gpt.com/api/generate/flashcard", {
+            const response = await fetch(`${API_BASE_URL}/api/generate/flashcard`, {
                 method: "POST",
                 headers: {
                     "Content-Type": "application/json",

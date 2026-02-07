@@ -30,6 +30,8 @@ import {
 } from "lucide-react";
 import { motion, AnimatePresence } from "framer-motion";
 import DocumentEditor from "./_components/DocumentEditor";
+import { API_BASE_URL } from "@/lib/constants";
+
 
 interface MaterialFolder {
     _id: string;
@@ -107,7 +109,7 @@ export default function NotesPage() {
     const fetchFolders = async () => {
         try {
             const token = localStorage.getItem("access_token");
-            const response = await fetch("https://shiksha-gpt.com/api/folders/", {
+            const response = await fetch(`${API_BASE_URL}/api/folders/`, {
                 headers: { "Authorization": `Bearer ${token}` }
             });
             if (response.ok) {
@@ -123,7 +125,7 @@ export default function NotesPage() {
         setIsLoading(true);
         try {
             const token = localStorage.getItem("access_token");
-            let url = "https://shiksha-gpt.com/api/resources/";
+            let url = `${API_BASE_URL}/api/resources/`;
             const params = new URLSearchParams();
             if (selectedFolderId !== "all") {
                 params.append("folder_id", selectedFolderId);
@@ -174,7 +176,7 @@ export default function NotesPage() {
                 content: content
             };
 
-            const response = await fetch("https://shiksha-gpt.com/api/resources/note", {
+            const response = await fetch(`${API_BASE_URL}/api/resources/note`, {
                 method: "POST",
                 headers: {
                     "Content-Type": "application/json",
@@ -198,7 +200,7 @@ export default function NotesPage() {
 
         try {
             const token = localStorage.getItem("access_token");
-            const response = await fetch("https://shiksha-gpt.com/api/folders/", {
+            const response = await fetch(`${API_BASE_URL}/api/folders/`, {
                 method: "POST",
                 headers: {
                     "Content-Type": "application/json",
@@ -220,7 +222,7 @@ export default function NotesPage() {
     const handleUpdateFolder = async (folderId: string, newName: string) => {
         try {
             const token = localStorage.getItem("access_token");
-            const response = await fetch(`https://shiksha-gpt.com/api/folders/${folderId}`, {
+            const response = await fetch(`${API_BASE_URL}/api/folders/${folderId}`, {
                 method: "PUT",
                 headers: {
                     "Content-Type": "application/json",
@@ -242,7 +244,7 @@ export default function NotesPage() {
         if (!confirm("Are you sure you want to delete this folder? All contents might be affected.")) return;
         try {
             const token = localStorage.getItem("access_token");
-            const response = await fetch(`https://shiksha-gpt.com/api/folders/${folderId}`, {
+            const response = await fetch(`${API_BASE_URL}/api/folders/${folderId}`, {
                 method: "DELETE",
                 headers: { "Authorization": `Bearer ${token}` }
             });
@@ -279,7 +281,7 @@ export default function NotesPage() {
                     formData.append("folder_id", selectedFolderId);
                 }
 
-                const response = await fetch("https://shiksha-gpt.com/api/resources/upload", {
+                const response = await fetch(`${API_BASE_URL}/api/resources/upload`, {
                     method: "POST",
                     headers: { "Authorization": `Bearer ${token}` },
                     body: formData
@@ -316,7 +318,7 @@ export default function NotesPage() {
         if (!confirm("Are you sure you want to delete this item?")) return;
         try {
             const token = localStorage.getItem("access_token");
-            const response = await fetch(`https://shiksha-gpt.com/api/resources/${resourceId}`, {
+            const response = await fetch(`${API_BASE_URL}/api/resources/${resourceId}`, {
                 method: "DELETE",
                 headers: { "Authorization": `Bearer ${token}` }
             });

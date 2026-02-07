@@ -5,6 +5,8 @@ import Link from "next/link";
 import { Mail, Lock, Eye, EyeOff, ArrowLeft, BookOpen, MessageSquare, BrainCircuit, FileText, Lightbulb, Layers, Calendar, Presentation } from "lucide-react";
 import { motion, AnimatePresence } from "framer-motion";
 import { useRouter } from "next/navigation";
+import { API_BASE_URL } from "@/lib/constants";
+
 
 export default function LoginPage() {
     const [showPassword, setShowPassword] = useState(false);
@@ -20,7 +22,7 @@ export default function LoginPage() {
         setIsLoading(true);
 
         try {
-            const response = await fetch("https://shiksha-gpt.com/api/auth/login", {
+            const response = await fetch(`${API_BASE_URL}/api/auth/login`, {
                 method: "POST",
                 headers: {
                     "Content-Type": "application/json",

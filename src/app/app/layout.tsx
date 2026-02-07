@@ -43,6 +43,8 @@ import {
 import { useTheme } from "next-themes";
 import { motion, AnimatePresence } from "framer-motion";
 import { SidebarProvider, useSidebar } from "../context/SidebarContext";
+import { API_BASE_URL } from "@/lib/constants";
+
 
 const navItems = [
     { icon: Calendar, label: "Calendar", href: "/app/calendar", color: "text-rose-500", bgColor: "bg-rose-500/10" },
@@ -263,7 +265,7 @@ function AppContent({ children }: { children: React.ReactNode }) {
     const fetchConversations = async (userId: string) => {
         try {
             const token = localStorage.getItem("access_token");
-            const response = await fetch(`https://shiksha-gpt.com/api/conversations/${userId}`, {
+            const response = await fetch(`${API_BASE_URL}/api/conversations/${userId}`, {
                 headers: {
                     "Authorization": `Bearer ${token}`
                 }
@@ -280,7 +282,7 @@ function AppContent({ children }: { children: React.ReactNode }) {
     const fetchStreak = async () => {
         try {
             const token = localStorage.getItem("access_token");
-            const response = await fetch("https://shiksha-gpt.com/api/streaks/", {
+            const response = await fetch(`${API_BASE_URL}/api/streaks/`, {
                 headers: {
                     "Authorization": `Bearer ${token}`
                 }

@@ -24,6 +24,8 @@ import remarkGfm from 'remark-gfm';
 import remarkBreaks from 'remark-breaks';
 import { useSidebar } from "../../context/SidebarContext";
 import { useVoiceRecording } from "@/hooks/useVoiceRecording";
+import { API_BASE_URL } from "@/lib/constants";
+
 
 interface Message {
     role: "user" | "assistant";
@@ -59,7 +61,7 @@ function ChatContent() {
         setIsLoading(true);
         try {
             const token = localStorage.getItem("access_token");
-            const response = await fetch(`https://shiksha-gpt.com/api/conversation/${id}`, {
+            const response = await fetch(`${API_BASE_URL}/api/conversation/${id}`, {
                 headers: {
                     "Authorization": `Bearer ${token}`
                 }
@@ -143,7 +145,7 @@ function ChatContent() {
 
         try {
             const token = localStorage.getItem("access_token");
-            const response = await fetch("https://shiksha-gpt.com/api/message", {
+            const response = await fetch(`${API_BASE_URL}/api/message`, {
                 method: "POST",
                 headers: {
                     "Content-Type": "application/json",

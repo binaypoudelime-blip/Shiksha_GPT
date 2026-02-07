@@ -26,6 +26,8 @@ import {
     Trash2
 } from "lucide-react";
 import { motion, AnimatePresence } from "framer-motion";
+import { API_BASE_URL } from "@/lib/constants";
+
 
 interface Subject {
     _id: string;
@@ -113,7 +115,7 @@ export default function PracticeTestPage() {
         setIsLoadingTests(true);
         try {
             const token = localStorage.getItem("access_token");
-            const response = await fetch(`https://shiksha-gpt.com/api/practice-sets?limit=${currentLimit}&skip=${currentSkip}`, {
+            const response = await fetch(`${API_BASE_URL}/api/practice-sets?limit=${currentLimit}&skip=${currentSkip}`, {
                 headers: { "Authorization": `Bearer ${token}` }
             });
             if (response.ok) {
@@ -147,7 +149,7 @@ export default function PracticeTestPage() {
         setIsLoadingSubjects(true);
         try {
             const token = localStorage.getItem("access_token");
-            const response = await fetch("https://shiksha-gpt.com/api/subjects/", {
+            const response = await fetch(`${API_BASE_URL}/api/subjects/`, {
                 headers: { "Authorization": `Bearer ${token}` }
             });
             if (response.ok) {
@@ -165,7 +167,7 @@ export default function PracticeTestPage() {
         setIsLoadingUnits(true);
         try {
             const token = localStorage.getItem("access_token");
-            const response = await fetch(`https://shiksha-gpt.com/api/subjects/${subjectId}/topics`, {
+            const response = await fetch(`${API_BASE_URL}/api/subjects/${subjectId}/topics`, {
                 headers: { "Authorization": `Bearer ${token}` }
             });
             if (response.ok) {
@@ -271,7 +273,7 @@ export default function PracticeTestPage() {
                 shortanswer: questionConfigs.find(c => c.id === "sa")?.count || 0
             };
 
-            const response = await fetch("https://shiksha-gpt.com/api/practice-set/generate", {
+            const response = await fetch(`${API_BASE_URL}/api/practice-set/generate`, {
                 method: "POST",
                 headers: {
                     "Content-Type": "application/json",
@@ -321,7 +323,7 @@ export default function PracticeTestPage() {
         setIsLoadingDetail(true);
         try {
             const token = localStorage.getItem("access_token");
-            const response = await fetch(`https://shiksha-gpt.com/api/practice-set/${testId}?include_answers=false`, {
+            const response = await fetch(`${API_BASE_URL}/api/practice-set/${testId}?include_answers=false`, {
                 headers: { "Authorization": `Bearer ${token}` }
             });
             if (response.ok) {
@@ -355,7 +357,7 @@ export default function PracticeTestPage() {
         setIsLoadingDetail(true);
         try {
             const token = localStorage.getItem("access_token");
-            const response = await fetch(`https://shiksha-gpt.com/api/practice-set/${testId}?include_answers=true`, {
+            const response = await fetch(`${API_BASE_URL}/api/practice-set/${testId}?include_answers=true`, {
                 headers: { "Authorization": `Bearer ${token}` }
             });
             if (response.ok) {

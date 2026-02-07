@@ -25,6 +25,8 @@ import {
     CheckCircle2
 } from "lucide-react";
 import { motion, AnimatePresence } from "framer-motion";
+import { API_BASE_URL } from "@/lib/constants";
+
 
 export default function DashboardPage() {
     return (
@@ -195,7 +197,7 @@ function StreakWidget() {
         const fetchStreak = async () => {
             try {
                 const token = localStorage.getItem("access_token");
-                const response = await fetch("https://shiksha-gpt.com/api/streaks/", {
+                const response = await fetch(`${API_BASE_URL}/api/streaks/`, {
                     headers: {
                         "Authorization": `Bearer ${token}`
                     }
@@ -368,7 +370,7 @@ function StickyNotes() {
         setIsLoading(true);
         try {
             const token = localStorage.getItem("access_token");
-            const response = await fetch("https://shiksha-gpt.com/api/todos/", {
+            const response = await fetch(`${API_BASE_URL}/api/todos/`, {
                 headers: {
                     "Authorization": `Bearer ${token}`
                 }
@@ -393,7 +395,7 @@ function StickyNotes() {
 
         try {
             const token = localStorage.getItem("access_token");
-            const response = await fetch("https://shiksha-gpt.com/api/todos/", {
+            const response = await fetch(`${API_BASE_URL}/api/todos/`, {
                 method: "POST",
                 headers: {
                     "Content-Type": "application/json",
@@ -414,7 +416,7 @@ function StickyNotes() {
     const deleteNote = async (id: string) => {
         try {
             const token = localStorage.getItem("access_token");
-            const response = await fetch(`https://shiksha-gpt.com/api/todos/${id}`, {
+            const response = await fetch(`${API_BASE_URL}/api/todos/${id}`, {
                 method: "DELETE",
                 headers: {
                     "Authorization": `Bearer ${token}`
@@ -432,7 +434,7 @@ function StickyNotes() {
     const updateNote = async (id: string, text: string, completed: boolean) => {
         try {
             const token = localStorage.getItem("access_token");
-            const response = await fetch(`https://shiksha-gpt.com/api/todos/${id}`, {
+            const response = await fetch(`${API_BASE_URL}/api/todos/${id}`, {
                 method: "PUT",
                 headers: {
                     "Content-Type": "application/json",

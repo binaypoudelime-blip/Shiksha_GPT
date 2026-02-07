@@ -1,3 +1,4 @@
+import { API_BASE_URL } from '@/lib/constants';
 import { useState, useRef } from 'react';
 
 export const useVoiceRecording = (onTranscription: (text: string) => void) => {
@@ -90,7 +91,7 @@ export const useVoiceRecording = (onTranscription: (text: string) => void) => {
             const formData = new FormData();
             formData.append('file', blob, 'recording.wav');
 
-            const response = await fetch('https://shiksha-gpt.com/api/transcribe/', {
+            const response = await fetch(`${API_BASE_URL}/api/transcribe/`, {
                 method: 'POST',
                 headers: {
                     ...(token ? { 'Authorization': `Bearer ${token}` } : {})

@@ -20,6 +20,8 @@ import {
 } from "lucide-react";
 import { motion, AnimatePresence } from "framer-motion";
 import ReactMarkdown from "react-markdown";
+import { API_BASE_URL } from "@/lib/constants";
+
 import remarkGfm from "remark-gfm";
 import remarkBreaks from "remark-breaks";
 
@@ -80,7 +82,7 @@ export default function SummariesPage() {
         setIsLoadingSummaries(true);
         try {
             const token = localStorage.getItem("access_token");
-            const response = await fetch("https://shiksha-gpt.com/api/summaries?limit=50&skip=0", {
+            const response = await fetch(`${API_BASE_URL}/api/summaries?limit=50&skip=0`, {
                 headers: {
                     "Authorization": `Bearer ${token}`
                 }
@@ -104,7 +106,7 @@ export default function SummariesPage() {
         setIsLoadingSubjects(true);
         try {
             const token = localStorage.getItem("access_token");
-            const response = await fetch("https://shiksha-gpt.com/api/subjects/", {
+            const response = await fetch(`${API_BASE_URL}/api/subjects/`, {
                 headers: {
                     "Authorization": `Bearer ${token}`
                 }
@@ -124,7 +126,7 @@ export default function SummariesPage() {
         setIsLoadingUnits(true);
         try {
             const token = localStorage.getItem("access_token");
-            const response = await fetch(`https://shiksha-gpt.com/api/subjects/${subjectId}/topics`, {
+            const response = await fetch(`${API_BASE_URL}/api/subjects/${subjectId}/topics`, {
                 headers: {
                     "Authorization": `Bearer ${token}`
                 }
@@ -185,7 +187,7 @@ export default function SummariesPage() {
         // Increment view count
         try {
             const token = localStorage.getItem("access_token");
-            fetch(`https://shiksha-gpt.com/api/summary/${summary.id}/view`, {
+            fetch(`${API_BASE_URL}/api/summary/${summary.id}/view`, {
                 method: "POST",
                 headers: {
                     "Authorization": `Bearer ${token}`
@@ -207,7 +209,7 @@ export default function SummariesPage() {
             setIsFetchingDetails(true);
             try {
                 const token = localStorage.getItem("access_token");
-                const response = await fetch(`https://shiksha-gpt.com/api/summary/${summary.id}`, {
+                const response = await fetch(`${API_BASE_URL}/api/summary/${summary.id}`, {
                     headers: {
                         "Authorization": `Bearer ${token}`
                     }
@@ -257,7 +259,7 @@ export default function SummariesPage() {
 
             const user = JSON.parse(userStr);
 
-            const response = await fetch("https://shiksha-gpt.com/api/generate/summary", {
+            const response = await fetch(`${API_BASE_URL}/api/generate/summary`, {
                 method: "POST",
                 headers: {
                     "Content-Type": "application/json",
@@ -311,7 +313,7 @@ export default function SummariesPage() {
 
         try {
             const token = localStorage.getItem("access_token");
-            const response = await fetch(`https://shiksha-gpt.com/api/summary/${activeSummary.id}/chat`, {
+            const response = await fetch(`${API_BASE_URL}/api/summary/${activeSummary.id}/chat`, {
                 method: "POST",
                 headers: {
                     "Content-Type": "application/json",

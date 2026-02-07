@@ -1,5 +1,7 @@
 
 import { NextRequest, NextResponse } from 'next/server';
+import { API_BASE_URL } from '@/lib/constants';
+
 
 export async function POST(request: NextRequest) {
     try {
@@ -10,7 +12,7 @@ export async function POST(request: NextRequest) {
             return NextResponse.json({ error: 'Missing fileUrl' }, { status: 400 });
         }
 
-        const fullUrl = fileUrl.startsWith('http') ? fileUrl : `https://shiksha-gpt.com${fileUrl}`;
+        const fullUrl = fileUrl.startsWith('http') ? fileUrl : `${API_BASE_URL}${fileUrl}`;
 
         // Forward the request to the actual backend
         const response = await fetch(fullUrl, {

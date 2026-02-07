@@ -3,6 +3,8 @@
 import React, { useState, useEffect } from "react";
 import { HelpCircle, Plus, BookOpen, Clock, X, ChevronDown, Loader2, CheckCircle2, LayoutGrid, List, Play, RotateCcw } from "lucide-react";
 import { motion, AnimatePresence } from "framer-motion";
+import { API_BASE_URL } from "@/lib/constants";
+
 
 interface Subject {
     _id: string;
@@ -68,7 +70,7 @@ export default function QuizzesPage() {
         setIsLoadingQuizzes(true);
         try {
             const token = localStorage.getItem("access_token");
-            const response = await fetch(`https://shiksha-gpt.com/api/quizzes?limit=${currentLimit}&skip=${currentSkip}`, {
+            const response = await fetch(`${API_BASE_URL}/api/quizzes?limit=${currentLimit}&skip=${currentSkip}`, {
                 headers: {
                     "Authorization": `Bearer ${token}`
                 }
@@ -81,7 +83,7 @@ export default function QuizzesPage() {
                 const quizDataWithAttempts = await Promise.all(
                     data.quizzes.map(async (q: any) => {
                         try {
-                            const attemptsResponse = await fetch(`https://shiksha-gpt.com/api/quiz/${q.id}/attempts?limit=1&skip=0`, {
+                            const attemptsResponse = await fetch(`${API_BASE_URL}/api/quiz/${q.id}/attempts?limit=1&skip=0`, {
                                 headers: { "Authorization": `Bearer ${token}` }
                             });
                             const attemptsData = await attemptsResponse.json();
@@ -135,7 +137,7 @@ export default function QuizzesPage() {
         setIsLoadingSubjects(true);
         try {
             const token = localStorage.getItem("access_token");
-            const response = await fetch("https://shiksha-gpt.com/api/subjects/", {
+            const response = await fetch(`${API_BASE_URL}/api/subjects/`, {
                 headers: {
                     "Authorization": `Bearer ${token}`
                 }
@@ -155,7 +157,7 @@ export default function QuizzesPage() {
         setIsLoadingUnits(true);
         try {
             const token = localStorage.getItem("access_token");
-            const response = await fetch(`https://shiksha-gpt.com/api/subjects/${subjectId}/topics`, {
+            const response = await fetch(`${API_BASE_URL}/api/subjects/${subjectId}/topics`, {
                 headers: {
                     "Authorization": `Bearer ${token}`
                 }
@@ -204,7 +206,7 @@ export default function QuizzesPage() {
         console.log("Fetching details for quiz:", quizId);
         try {
             const token = localStorage.getItem("access_token");
-            const response = await fetch(`https://shiksha-gpt.com/api/quiz/${quizId}`, {
+            const response = await fetch(`${API_BASE_URL}/api/quiz/${quizId}`, {
                 headers: {
                     "Authorization": `Bearer ${token}`
                 }
@@ -308,7 +310,7 @@ export default function QuizzesPage() {
                 completed_at: completedAt
             };
 
-            const response = await fetch("https://shiksha-gpt.com/api/quiz/submit", {
+            const response = await fetch(`${API_BASE_URL}/api/quiz/submit`, {
                 method: "POST",
                 headers: {
                     "Content-Type": "application/json",
@@ -426,7 +428,7 @@ export default function QuizzesPage() {
                 }
             }
 
-            const response = await fetch("https://shiksha-gpt.com/api/generate/quiz", {
+            const response = await fetch(`${API_BASE_URL}/api/generate/quiz`, {
                 method: "POST",
                 headers: {
                     "Content-Type": "application/json",
