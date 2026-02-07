@@ -19,7 +19,14 @@ import {
     Palette,
     Check,
     ChevronDown,
-    Type
+    Type,
+    FileSpreadsheet,
+    FileVideo,
+    FileArchive,
+    FileCode,
+    FileAudio,
+    FileDigit,
+    FileImage
 } from "lucide-react";
 import { motion, AnimatePresence } from "framer-motion";
 import DocumentEditor from "./_components/DocumentEditor";
@@ -322,18 +329,70 @@ export default function NotesPage() {
         }
     };
 
-    const getFileIcon = (type: string) => {
-        switch (type) {
-            case 'pdf': return <FileText className="w-5 h-5 text-red-500" />;
-            case 'docx': return <FileText className="w-5 h-5 text-blue-500" />;
-            case 'xlsx': return <FileText className="w-5 h-5 text-green-500" />;
-            case 'pptx': return <FileText className="w-5 h-5 text-orange-500" />;
-            case 'doc': return <FileText className="w-5 h-5 text-indigo-500" />;
+    const getFileIcon = (item: any) => {
+        if (item.type === 'note') {
+            return {
+                icon: <FileText className="w-5 h-5 text-indigo-500" />,
+                bg: "bg-indigo-50 dark:bg-indigo-500/10"
+            };
+        }
+
+        const extension = item.title?.split('.').pop()?.toLowerCase() || item.mime_type?.split('/').pop()?.toLowerCase();
+
+        switch (extension) {
+            case 'pdf':
+                return {
+                    icon: <FileText className="w-5 h-5 text-red-500" />,
+                    bg: "bg-red-50 dark:bg-red-500/10"
+                };
+            case 'docx':
+            case 'doc':
+                return {
+                    icon: <FileDigit className="w-5 h-5 text-blue-500" />,
+                    bg: "bg-blue-50 dark:bg-blue-500/10"
+                };
+            case 'xlsx':
+            case 'xls':
+            case 'csv':
+                return {
+                    icon: <FileSpreadsheet className="w-5 h-5 text-emerald-500" />,
+                    bg: "bg-emerald-50 dark:bg-emerald-500/10"
+                };
+            case 'pptx':
+            case 'ppt':
+                return {
+                    icon: <FileDigit className="w-5 h-5 text-orange-500" />,
+                    bg: "bg-orange-50 dark:bg-orange-500/10"
+                };
             case 'png':
             case 'jpg':
             case 'jpeg':
-            case 'svg': return <ImageIcon className="w-5 h-5 text-purple-500" />;
-            default: return <FileIcon className="w-5 h-5 text-slate-400" />;
+            case 'gif':
+            case 'svg':
+            case 'webp':
+                return {
+                    icon: <FileImage className="w-5 h-5 text-purple-500" />,
+                    bg: "bg-purple-50 dark:bg-purple-500/10"
+                };
+            case 'mp4':
+            case 'mov':
+            case 'avi':
+                return {
+                    icon: <FileVideo className="w-5 h-5 text-pink-500" />,
+                    bg: "bg-pink-50 dark:bg-pink-500/10"
+                };
+            case 'zip':
+            case 'rar':
+            case '7z':
+                return {
+                    icon: <FileArchive className="w-5 h-5 text-amber-500" />,
+                    bg: "bg-amber-50 dark:bg-amber-500/10"
+                };
+            default:
+                return {
+                    icon: <FileIcon className="w-5 h-5 text-slate-400" />,
+                    bg: "bg-slate-50 dark:bg-slate-500/10"
+                };
         }
     };
 
@@ -356,7 +415,7 @@ export default function NotesPage() {
     });
 
     return (
-        <div className="max-w-[1200px] mx-auto space-y-8 p-4">
+        <div className="max-w-[1500px] mx-auto space-y-5 pt-0 p-4">
             {/* Dashboard Header - Only show when editor is closed */}
             <AnimatePresence mode="wait">
                 {!isEditorOpen && (
@@ -518,7 +577,7 @@ export default function NotesPage() {
                             ) : (
                                 <div
                                     className={viewMode === "grid"
-                                        ? "grid grid-cols-3 sm:grid-cols-4 md:grid-cols-6 lg:grid-cols-7 xl:grid-cols-8 gap-3"
+                                        ? "grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-6 gap-5"
                                         : "flex flex-col gap-2"}
                                 >
                                     {/* Add Material Card (Grid Mode Only) */}
@@ -528,14 +587,14 @@ export default function NotesPage() {
                                             initial={{ opacity: 0, scale: 0.9 }}
                                             animate={{ opacity: 1, scale: 1 }}
                                             onClick={() => setIsUploadModalOpen(true)}
-                                            className="group bg-slate-50 dark:bg-slate-900/30 border-2 border-dashed border-slate-200 dark:border-slate-800 rounded-2xl p-3 flex flex-col items-center justify-center text-center space-y-1.5 cursor-pointer hover:border-primary/50 hover:bg-primary/5 transition-all h-[115px]"
+                                            className="group bg-slate-50 dark:bg-slate-900/30 border-2 border-dashed border-slate-200 dark:border-slate-800 rounded-2xl p-4 flex flex-col items-center justify-center text-center space-y-3 cursor-pointer hover:border-primary/50 hover:bg-primary/5 transition-all h-[155px]"
                                         >
-                                            <div className="w-8 h-8 bg-white dark:bg-[#1A1A1E] rounded-xl flex items-center justify-center shadow-md group-hover:scale-110 transition-transform text-primary border border-slate-100 dark:border-slate-800">
-                                                <Upload className="w-4 h-4" />
+                                            <div className="w-12 h-12 bg-white dark:bg-[#1A1A1E] rounded-2xl flex items-center justify-center shadow-md group-hover:scale-110 transition-transform text-primary border border-slate-100 dark:border-slate-800">
+                                                <Plus className="w-6 h-6" />
                                             </div>
                                             <div>
-                                                <p className="text-xs font-bold dark:text-white group-hover:text-primary transition-colors">Add Material</p>
-                                                <p className="text-[9px] text-slate-400 mt-0.5 uppercase tracking-widest font-bold">Upload Files</p>
+                                                <p className="text-sm font-bold dark:text-white group-hover:text-primary transition-colors">Add Material</p>
+                                                <p className="text-[9px] text-slate-400 mt-1 uppercase tracking-widest font-bold">Upload Files</p>
                                             </div>
                                         </motion.div>
                                     )}
@@ -547,14 +606,14 @@ export default function NotesPage() {
                                             initial={{ opacity: 0, scale: 0.9 }}
                                             animate={{ opacity: 1, scale: 1 }}
                                             onClick={handleCreateBlankDocument}
-                                            className="group bg-primary/5 dark:bg-primary/10 border-2 border-dashed border-primary/20 dark:border-primary/30 rounded-2xl p-3 flex flex-col items-center justify-center text-center space-y-1.5 cursor-pointer hover:border-primary/50 hover:bg-primary/10 transition-all h-[115px]"
+                                            className="group bg-primary/5 dark:bg-primary/10 border-2 border-dashed border-primary/20 dark:border-primary/30 rounded-2xl p-4 flex flex-col items-center justify-center text-center space-y-3 cursor-pointer hover:border-primary/50 hover:bg-primary/10 transition-all h-[155px]"
                                         >
-                                            <div className="w-8 h-8 bg-white dark:bg-primary/20 rounded-xl flex items-center justify-center shadow-md group-hover:scale-110 transition-transform text-primary border border-primary/10">
-                                                <Plus className="w-4 h-4" />
+                                            <div className="w-12 h-12 bg-white dark:bg-primary/20 rounded-2xl flex items-center justify-center shadow-md group-hover:scale-110 transition-transform text-primary border border-primary/10">
+                                                <FileText className="w-6 h-6" />
                                             </div>
                                             <div>
-                                                <p className="text-xs font-bold dark:text-white group-hover:text-primary transition-colors">Blank Document</p>
-                                                <p className="text-[9px] text-primary/60 mt-0.5 uppercase tracking-widest font-bold">Create New</p>
+                                                <p className="text-sm font-bold dark:text-white group-hover:text-primary transition-colors">Blank Document</p>
+                                                <p className="text-[9px] text-primary/60 mt-1 uppercase tracking-widest font-bold">Create New</p>
                                             </div>
                                         </motion.div>
                                     )}
@@ -575,26 +634,30 @@ export default function NotesPage() {
                                                     window.open(`https://shiksha-gpt.com${(item as any).file_url}`, '_blank');
                                                 }
                                             }}
-                                            className={`group bg-white dark:bg-[#121214] border border-slate-200 dark:border-slate-800 rounded-2xl hover:border-primary/50 hover:shadow-xl cursor-pointer overflow-hidden ${viewMode === "grid" ? "flex flex-col h-[115px]" : "p-3 flex items-center justify-between"
+                                            className={`group bg-white dark:bg-[#121214] border border-slate-200 dark:border-slate-800 rounded-2xl hover:border-primary/50 hover:shadow-xl cursor-pointer overflow-hidden ${viewMode === "grid" ? "flex flex-col h-[155px]" : "p-3 flex items-center justify-between"
                                                 }`}
                                             transition={{
                                                 layout: { duration: 0.4, ease: [0.23, 1, 0.32, 1] }
                                             }}
                                         >
                                             {viewMode === "grid" && (
-                                                <motion.div layout className="h-[65px] w-full bg-slate-50 dark:bg-white/5 flex items-center justify-center relative group-hover:bg-slate-100/50 dark:group-hover:bg-white/10 transition-colors">
+                                                <motion.div layout className="h-[95px] w-full bg-slate-50 dark:bg-white/5 flex items-center justify-center relative group-hover:bg-slate-100/50 dark:group-hover:bg-white/10 transition-colors">
                                                     {item.itemType === 'folder' ? (
                                                         <motion.div
                                                             layout
                                                             layoutId={`icon-${item.id}`}
-                                                            className="w-9 h-9 rounded-lg flex items-center justify-center relative"
+                                                            className="w-11 h-11 rounded-xl flex items-center justify-center relative shadow-sm"
                                                             style={{ backgroundColor: `${getFolderColor(item.id)}15` }}
                                                         >
-                                                            <Folder className="w-5 h-5" style={{ color: getFolderColor(item.id) }} fill={getFolderColor(item.id)} />
+                                                            <Folder className="w-7 h-7" style={{ color: getFolderColor(item.id) }} fill={getFolderColor(item.id)} />
                                                         </motion.div>
                                                     ) : (
-                                                        <motion.div layout layoutId={`icon-${item.id}`} className="w-8 h-8 bg-white dark:bg-[#1A1A1E] rounded-lg flex items-center justify-center shadow-md border border-slate-100 dark:border-slate-800">
-                                                            {getFileIcon((item as any).mime_type?.split('/').pop() || (item as any).type === 'note' ? 'doc' : 'file')}
+                                                        <motion.div
+                                                            layout
+                                                            layoutId={`icon-${item.id}`}
+                                                            className={`w-11 h-11 rounded-xl flex items-center justify-center shadow-sm border border-slate-100 dark:border-slate-800 ${getFileIcon(item).bg}`}
+                                                        >
+                                                            {getFileIcon(item).icon}
                                                         </motion.div>
                                                     )}
 
@@ -634,20 +697,34 @@ export default function NotesPage() {
                                                             <Folder className="w-4.5 h-4.5 text-primary" fill="currentColor" />
                                                         </motion.div>
                                                     ) : (
-                                                        <motion.div layout layoutId={`icon-${item.id}`} className="w-9 h-9 bg-slate-50 dark:bg-white/5 rounded-lg flex items-center justify-center group-hover:scale-105 transition-transform">
-                                                            {getFileIcon((item as any).mime_type?.split('/').pop() || (item as any).type === 'note' ? 'doc' : 'file')}
+                                                        <motion.div
+                                                            layout
+                                                            layoutId={`icon-${item.id}`}
+                                                            className={`w-9 h-9 rounded-lg flex items-center justify-center group-hover:scale-105 transition-transform ${getFileIcon(item).bg}`}
+                                                        >
+                                                            {getFileIcon(item).icon}
                                                         </motion.div>
                                                     )
                                                 )}
                                                 <div className="min-w-0">
-                                                    <motion.h3 layout layoutId={`title-${item.id}`} className="text-[10px] font-bold dark:text-white truncate group-hover:text-primary transition-colors">{item.name}</motion.h3>
-                                                    <motion.div layout className="flex items-center gap-2 mt-0.5">
+                                                    <motion.h3 layout layoutId={`title-${item.id}`} className="text-[12px] font-bold dark:text-white truncate group-hover:text-primary transition-colors leading-tight">{item.name}</motion.h3>
+                                                    <motion.div layout className="flex items-center gap-2 mt-1.5">
                                                         {item.itemType === 'folder' && (
-                                                            <motion.div layout className="w-1.5 h-1.5 rounded-full shrink-0" style={{ backgroundColor: getFolderColor(item.id) }} />
+                                                            <motion.div layout className="w-2 h-2 rounded-full shrink-0" style={{ backgroundColor: getFolderColor(item.id) }} />
                                                         )}
-                                                        <motion.p layout className="text-[7px] text-slate-400 font-bold uppercase tracking-wider whitespace-nowrap">
-                                                            {item.itemType === 'folder' ? 'Folder' : (item as any).file_size ? `${(parseInt((item as any).file_size) / 1024 / 1024).toFixed(2)} MB` : 'Note'} • {new Date((item as any).created_at).toLocaleDateString()}
-                                                        </motion.p>
+                                                        <motion.div layout className="text-[10px] text-slate-400 font-semibold uppercase tracking-wider whitespace-nowrap flex items-center gap-1.5">
+                                                            {item.itemType === 'folder' ? (
+                                                                <span className="text-primary font-bold">Folder</span>
+                                                            ) : (item as any).file_size ? (
+                                                                <span className="font-bold">{(parseInt((item as any).file_size) / 1024 / 1024).toFixed(2)} MB</span>
+                                                            ) : (
+                                                                <span className="px-1.5 py-0.5 bg-indigo-500/10 text-indigo-600 dark:text-indigo-400 border border-indigo-500/20 rounded-[4px] font-extrabold shadow-sm">
+                                                                    Note
+                                                                </span>
+                                                            )}
+                                                            <span className="opacity-40">•</span>
+                                                            <span className="opacity-70 font-bold">{new Date((item as any).created_at).toLocaleDateString()}</span>
+                                                        </motion.div>
                                                     </motion.div>
                                                 </div>
                                             </motion.div>

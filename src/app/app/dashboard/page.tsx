@@ -234,41 +234,78 @@ function StreakWidget() {
                             )}
                         </AnimatePresence>
 
-                        <div className={`p-2 rounded-xl transition-all duration-300 z-10 relative bg-orange-50 dark:bg-orange-950/20 text-orange-600 ${isHovered ? "scale-110" : ""
-                            }`}>
-                            <motion.div
-                                animate={isHovered ? {
-                                    scale: [1, 1.15, 1, 1.2, 1],
-                                    rotate: [0, -8, 8, -8, 0],
-                                    y: [0, -2, 0, -3, 0],
-                                } : {}}
-                                transition={isHovered ? {
-                                    duration: 0.5,
-                                    repeat: Infinity,
-                                    ease: "easeInOut"
-                                } : {}}
-                            >
-                                <Flame className="w-6 h-6 fill-current" />
-                            </motion.div>
+                        <div className={`p-2 rounded-xl transition-all duration-300 z-10 relative bg-orange-50 dark:bg-orange-950/20 text-orange-600 ${isHovered ? "scale-110" : ""}`}>
+                            <div className="relative flex items-center justify-center">
+                                <motion.div
+                                    animate={isHovered ? {
+                                        scale: [1, 1.08, 1, 1.12, 1],
+                                        rotate: [0, -3, 3, -2, 0],
+                                        y: [0, -1, 0, -2, 0],
+                                    } : {}}
+                                    transition={{
+                                        duration: 2.5, // Much slower pulsing
+                                        repeat: Infinity,
+                                        ease: "easeInOut"
+                                    }}
+                                    className="relative z-10"
+                                >
+                                    {/* Multi-layered Flame for depth */}
+                                    <Flame className="w-7 h-7 fill-orange-500 text-orange-600" />
 
-                            {/* Animated Embers */}
-                            <AnimatePresence>
-                                {isHovered && [1, 2, 3].map((i) => (
+                                    {/* Inner Flame Core */}
                                     <motion.div
-                                        key={i}
-                                        initial={{ opacity: 0, y: 0, x: 0, scale: 0.8 }}
                                         animate={{
-                                            opacity: [0, 1, 0],
-                                            y: -20 - (i * 10),
-                                            x: (Math.random() - 0.5) * 30,
-                                            scale: [0.8, 1.2, 0.5]
+                                            opacity: [0.6, 1, 0.6],
+                                            scale: [0.85, 0.95, 0.85],
                                         }}
                                         transition={{
-                                            duration: 0.8 + (i * 0.2),
+                                            duration: 1.8,
                                             repeat: Infinity,
-                                            delay: i * 0.2
+                                            ease: "easeInOut"
                                         }}
-                                        className="absolute top-0 left-1/2 w-1.5 h-1.5 bg-orange-400 rounded-full blur-[1px]"
+                                        className="absolute inset-0 flex items-center justify-center pointer-events-none"
+                                    >
+                                        <Flame className="w-4 h-4 fill-yellow-400 text-yellow-500" />
+                                    </motion.div>
+
+                                    {/* Hot Center */}
+                                    <motion.div
+                                        animate={{
+                                            opacity: [0.4, 0.8, 0.4],
+                                            scale: [0.6, 0.7, 0.6],
+                                        }}
+                                        transition={{
+                                            duration: 1.2,
+                                            repeat: Infinity,
+                                            ease: "easeInOut"
+                                        }}
+                                        className="absolute inset-0 flex items-center justify-center pointer-events-none"
+                                    >
+                                        <Flame className="w-2 h-2 fill-white text-yellow-100" />
+                                    </motion.div>
+                                </motion.div>
+                            </div>
+
+                            {/* Animated Embers with improved physics */}
+                            <AnimatePresence>
+                                {isHovered && [1, 2, 3, 4, 5].map((i) => (
+                                    <motion.div
+                                        key={i}
+                                        initial={{ opacity: 0, y: 0, x: 0, scale: 1 }}
+                                        animate={{
+                                            opacity: [0, 1, 1, 0],
+                                            y: [-10, -35 - (i * 5)],
+                                            x: [(i % 2 === 0 ? -15 : 15) * (i / 3), (i % 2 === 0 ? -25 : 25) * (i / 2)],
+                                            scale: [1, 1.2, 0.4, 0],
+                                            rotate: [0, 45, 90, 180]
+                                        }}
+                                        transition={{
+                                            duration: 1 + (i * 0.2),
+                                            repeat: Infinity,
+                                            delay: i * 0.15,
+                                            ease: "easeOut"
+                                        }}
+                                        className={`absolute top-0 left-1/2 -ml-1 w-1.5 h-1.5 ${i % 3 === 0 ? 'bg-yellow-300' : i % 2 === 0 ? 'bg-orange-400' : 'bg-red-500'} rounded-full blur-[0.6px]`}
                                     />
                                 ))}
                             </AnimatePresence>

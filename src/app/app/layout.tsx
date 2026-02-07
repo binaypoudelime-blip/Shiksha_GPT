@@ -424,30 +424,73 @@ function AppContent({ children }: { children: React.ReactNode }) {
                             onMouseLeave={() => setIsStreakHovered(false)}
                             className="flex items-center gap-1.5 px-3 py-1.5 bg-orange-50 dark:bg-orange-950/20 text-orange-600 rounded-full border border-orange-100 dark:border-orange-900/50 cursor-pointer transition-all duration-300 relative group/streak"
                         >
-                            <motion.div
-                                animate={isStreakHovered ? {
-                                    scale: [1, 1.2, 1, 1.3, 1],
-                                    rotate: [0, -10, 10, -10, 0],
-                                } : {}}
-                                transition={isStreakHovered ? {
-                                    duration: 0.5,
-                                    repeat: Infinity,
-                                    ease: "easeInOut"
-                                } : {}}
-                            >
-                                <Flame className="w-4 h-4 fill-orange-600" />
-                            </motion.div>
-                            <span className="text-xs font-bold">{streak}</span>
+                            <div className="relative flex items-center justify-center">
+                                {/* Outer Glow */}
+                                <AnimatePresence>
+                                    {isStreakHovered && (
+                                        <motion.div
+                                            initial={{ opacity: 0, scale: 0.5 }}
+                                            animate={{ opacity: 1, scale: 1.4 }}
+                                            exit={{ opacity: 0, scale: 0.5 }}
+                                            className="absolute inset-0 bg-orange-500/30 blur-[6px] rounded-full"
+                                        />
+                                    )}
+                                </AnimatePresence>
 
-                            {/* Embers for small streak */}
+                                <motion.div
+                                    animate={isStreakHovered ? {
+                                        scale: [1, 1.05, 1, 1.08, 1],
+                                        rotate: [0, -2, 2, -1, 0],
+                                    } : {}}
+                                    transition={{
+                                        duration: 2, // Slower pulsing
+                                        repeat: Infinity,
+                                        ease: "easeInOut"
+                                    }}
+                                    className="relative z-10"
+                                >
+                                    {/* Primary Flame Layer */}
+                                    <Flame className="w-4 h-4 fill-orange-500 text-orange-600" />
+
+                                    {/* Inner Flame Layer (Yellow) */}
+                                    <motion.div
+                                        animate={{
+                                            opacity: [0.7, 1, 0.7],
+                                            scale: [0.9, 1, 0.9],
+                                        }}
+                                        transition={{
+                                            duration: 1.5,
+                                            repeat: Infinity,
+                                            ease: "easeInOut"
+                                        }}
+                                        className="absolute inset-0 flex items-center justify-center pointer-events-none"
+                                    >
+                                        <Flame className="w-2.5 h-2.5 fill-yellow-400 text-yellow-500" />
+                                    </motion.div>
+                                </motion.div>
+                            </div>
+
+                            <span className="text-xs font-bold z-10">{streak}</span>
+
+                            {/* Realistic Embers */}
                             <AnimatePresence>
-                                {isStreakHovered && [1, 2].map((i) => (
+                                {isStreakHovered && [1, 2, 3].map((i) => (
                                     <motion.div
                                         key={i}
-                                        initial={{ opacity: 0, y: 0, scale: 1 }}
-                                        animate={{ opacity: [0, 1, 0], y: -15, x: (i === 1 ? -10 : 10) }}
-                                        transition={{ duration: 0.6, repeat: Infinity, delay: i * 0.1 }}
-                                        className="absolute top-0 left-1/2 w-1 h-1 bg-orange-400 rounded-full"
+                                        initial={{ opacity: 0, y: 0, x: 0, scale: 1 }}
+                                        animate={{
+                                            opacity: [0, 1, 1, 0],
+                                            y: [-5, -25],
+                                            x: [(i === 1 ? -12 : i === 2 ? 12 : 0), (i === 1 ? -18 : i === 2 ? 18 : 5)],
+                                            scale: [1, 0.5, 0]
+                                        }}
+                                        transition={{
+                                            duration: 1.2,
+                                            repeat: Infinity,
+                                            delay: i * 0.3,
+                                            ease: "easeOut"
+                                        }}
+                                        className={`absolute top-0 left-1/2 -ml-0.5 w-1 h-1 ${i === 2 ? 'bg-yellow-400' : 'bg-orange-500'} rounded-full blur-[0.5px]`}
                                     />
                                 ))}
                             </AnimatePresence>
@@ -540,7 +583,7 @@ function AppContent({ children }: { children: React.ReactNode }) {
                 </header>
 
                 {/* Page Content */}
-                <div className="flex-1 overflow-y-auto p-4 md:p-8">
+                <div className="flex-1 overflow-y-auto p-4 md:p-6 bg-white dark:bg-[#0A0A0B]">
                     {children}
                 </div>
             </main>
