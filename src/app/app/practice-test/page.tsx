@@ -74,6 +74,27 @@ interface PracticeTest {
     questions?: Question[];
 }
 
+interface Attempt {
+    attempt_id: string;
+    attempt_number: number;
+    overall_score: number;
+    total_correct: number;
+    total_questions: number;
+    scores_by_type: Record<string, {
+        correct: number;
+        total: number;
+        percentage: number;
+    }>;
+    scores_by_unit: Record<string, {
+        correct: number;
+        total: number;
+        percentage: number;
+    }>;
+    total_time_seconds: number;
+    status: string;
+    completed_at: string;
+}
+
 export default function PracticeTestPage() {
     const [tests, setTests] = useState<PracticeTest[]>([]);
     const [isModalOpen, setIsModalOpen] = useState(false);
@@ -108,8 +129,20 @@ export default function PracticeTestPage() {
     const [currentQuestionIndex, setCurrentQuestionIndex] = useState(0);
     const [userAnswers, setUserAnswers] = useState<Record<string, string>>({});
     const [showResults, setShowResults] = useState(false);
-    const [isReviewMode, setIsReviewMode] = useState(false);
-    const [isLoadingDetail, setIsLoadingDetail] = useState(false);
+    const [isLoadingDetail, setIsLoadingDetail] = useState<string | null>(null);
+    const [testStartedAt, setTestStartedAt] = useState<string | null>(null);
+    const [questionStartTime, setQuestionStartTime] = useState<number>(0);
+    const [isSubmitting, setIsSubmitting] = useState(false);
+    const [testResult, setTestResult] = useState<any>(null);
+    const [questionTimes, setQuestionTimes] = useState<Record<string, number>>({});
+
+    // History state
+    const [showHistoryModal, setShowHistoryModal] = useState(false);
+    const [historyAttempts, setHistoryAttempts] = useState<Attempt[]>([]);
+    const [selectedTestForHistory, setSelectedTestForHistory] = useState<PracticeTest | null>(null);
+    const [isLoadingHistory, setIsLoadingHistory] = useState(false);
+    const [reviewingAttempt, setReviewingAttempt] = useState<any>(null);
+    const [isLoadingReview, setIsLoadingReview] = useState<string | null>(null);
 
     const fetchTests = async (currentSkip = skip, currentLimit = limit) => {
         setIsLoadingTests(true);
@@ -251,7 +284,6 @@ export default function PracticeTestPage() {
         setCurrentQuestionIndex(0);
         setUserAnswers({});
         setShowResults(false);
-        setIsReviewMode(false);
     };
 
     const handleGeneratePracticeTest = async () => {
@@ -310,7 +342,10 @@ export default function PracticeTestPage() {
                 setCurrentQuestionIndex(0);
                 setUserAnswers({});
                 setShowResults(false);
-                setIsReviewMode(false);
+                setTestStartedAt(new Date().toISOString());
+                setQuestionStartTime(Date.now());
+                setQuestionTimes({});
+                setTestResult(null);
             }
         } catch (error) {
             console.error("Failed to generate practice test", error);
@@ -320,7 +355,7 @@ export default function PracticeTestPage() {
     };
 
     const handleStartTest = async (testId: string) => {
-        setIsLoadingDetail(true);
+        setIsLoadingDetail(testId);
         try {
             const token = localStorage.getItem("access_token");
             const response = await fetch(`${API_BASE_URL}/api/practice-set/${testId}?include_answers=false`, {
@@ -344,46 +379,53 @@ export default function PracticeTestPage() {
                 setCurrentQuestionIndex(0);
                 setUserAnswers({});
                 setShowResults(false);
-                setIsReviewMode(false);
+                setTestStartedAt(new Date().toISOString());
+                setQuestionStartTime(Date.now());
+                setQuestionTimes({});
+                setTestResult(null);
             }
-        } catch (error) {
-            console.error("Failed to fetch test details", error);
         } finally {
-            setIsLoadingDetail(false);
+            setIsLoadingDetail(null);
         }
     };
 
-    const handleReviewTest = async (testId: string) => {
-        setIsLoadingDetail(true);
+    const fetchTestHistory = async (test: PracticeTest) => {
+        setSelectedTestForHistory(test);
+        setShowHistoryModal(true);
+        setIsLoadingHistory(true);
+        setHistoryAttempts([]);
         try {
             const token = localStorage.getItem("access_token");
-            const response = await fetch(`${API_BASE_URL}/api/practice-set/${testId}?include_answers=true`, {
+            const response = await fetch(`${API_BASE_URL}/api/practice-set/${test.id}/attempts?limit=10`, {
                 headers: { "Authorization": `Bearer ${token}` }
             });
             if (response.ok) {
                 const data = await response.json();
-                const testData: PracticeTest = {
-                    id: data._id,
-                    title: data.title,
-                    subject: data.metadata.subject,
-                    units: data.metadata.units,
-                    total_questions: data.metadata.total_questions,
-                    time: `${data.metadata.total_questions * 2} min`,
-                    created_at: data.created_at,
-                    times_attempted: data.times_attempted,
-                    average_score: data.average_score,
-                    questions: data.questions
-                };
-                setActiveTest(testData);
-                setCurrentQuestionIndex(0);
-                setUserAnswers({});
-                setShowResults(false);
-                setIsReviewMode(true);
+                setHistoryAttempts(data.attempts || []);
             }
         } catch (error) {
-            console.error("Failed to fetch review details", error);
+            console.error("Failed to fetch test history", error);
         } finally {
-            setIsLoadingDetail(false);
+            setIsLoadingHistory(false);
+        }
+    };
+
+    const fetchAttemptReview = async (practiceSetId: string, attemptId: string) => {
+        setIsLoadingReview(attemptId);
+        try {
+            const token = localStorage.getItem("access_token");
+            const response = await fetch(`${API_BASE_URL}/api/practice-set/${practiceSetId}/attempts/${attemptId}`, {
+                headers: { "Authorization": `Bearer ${token}` }
+            });
+            if (response.ok) {
+                const data = await response.json();
+                setReviewingAttempt(data);
+                setShowHistoryModal(false);
+            }
+        } catch (error) {
+            console.error("Failed to fetch attempt review", error);
+        } finally {
+            setIsLoadingReview(null);
         }
     };
 
@@ -399,6 +441,213 @@ export default function PracticeTestPage() {
             [questionId]: answer
         }));
     };
+
+    const updateTimeSpent = () => {
+        if (!activeTest || !activeTest.questions) return;
+        const currentQuestion = activeTest.questions[currentQuestionIndex];
+        const duration = Math.floor((Date.now() - questionStartTime) / 1000);
+
+        setQuestionTimes(prev => ({
+            ...prev,
+            [currentQuestion.question_id]: (prev[currentQuestion.question_id] || 0) + duration
+        }));
+        setQuestionStartTime(Date.now());
+    };
+
+    const handleNextQuestion = () => {
+        updateTimeSpent();
+        setCurrentQuestionIndex(prev => prev + 1);
+    };
+
+    const handlePreviousQuestion = () => {
+        updateTimeSpent();
+        setCurrentQuestionIndex(prev => prev - 1);
+    };
+
+    const handleSubmitTest = async () => {
+        if (!activeTest || !activeTest.questions) return;
+        setIsSubmitting(true);
+
+        try {
+            const completedAt = new Date().toISOString();
+            const currentQuestion = activeTest.questions[currentQuestionIndex];
+            const duration = Math.floor((Date.now() - questionStartTime) / 1000);
+
+            const finalTimes = {
+                ...questionTimes,
+                [currentQuestion.question_id]: (questionTimes[currentQuestion.question_id] || 0) + duration
+            };
+
+            const responses = activeTest.questions.map(q => ({
+                question_id: q.question_id,
+                user_answer: userAnswers[q.question_id] || "",
+                time_spent_seconds: finalTimes[q.question_id] || 0
+            }));
+
+            const payload = {
+                practice_set_id: activeTest.id,
+                responses,
+                started_at: testStartedAt,
+                completed_at: completedAt
+            };
+
+            const token = localStorage.getItem("access_token");
+            const response = await fetch(`${API_BASE_URL}/api/practice-set/${activeTest.id}/submit`, {
+                method: "POST",
+                headers: {
+                    "Content-Type": "application/json",
+                    "Authorization": `Bearer ${token}`
+                },
+                body: JSON.stringify(payload)
+            });
+
+            if (response.ok) {
+                const data = await response.json();
+                setTestResult(data);
+                setShowResults(true);
+                fetchTests(0, limit);
+            }
+        } catch (error) {
+            console.error("Failed to submit test", error);
+        } finally {
+            setIsSubmitting(false);
+        }
+    };
+
+    if (reviewingAttempt) {
+        return (
+            <div className="max-w-[900px] mx-auto p-4 space-y-6 pb-20">
+                {/* Review Header */}
+                <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-6 pb-4 border-b border-slate-200 dark:border-slate-800">
+                    <div className="space-y-1">
+                        <button
+                            onClick={() => {
+                                setReviewingAttempt(null);
+                                setShowHistoryModal(true);
+                            }}
+                            className="flex items-center gap-2 text-slate-500 hover:text-slate-700 dark:hover:text-white transition-colors text-sm font-bold mb-2"
+                        >
+                            <ChevronLeft className="w-4 h-4" /> Back to History
+                        </button>
+                        <h1 className="text-2xl font-black dark:text-white tracking-tight">Review Your Test</h1>
+                        <p className="text-slate-500 text-sm font-medium">Review your test, and see what you got right and wrong.</p>
+                    </div>
+
+                    <button
+                        onClick={() => {
+                            const testId = reviewingAttempt.practice_set_id;
+                            setReviewingAttempt(null);
+                            handleStartTest(testId);
+                        }}
+                        className="bg-primary text-white px-6 py-2.5 rounded-2xl font-bold flex items-center justify-center gap-2 shadow-lg shadow-primary/20 hover:scale-[1.02] active:scale-95 transition-all text-sm"
+                    >
+                        <RotateCcw className="w-4 h-4" /> Retake Test
+                    </button>
+                </div>
+
+                {/* Score Summary Card */}
+                <div className="bg-slate-50 dark:bg-white/5 border border-slate-200 dark:border-white/10 rounded-[20px] p-5 flex items-center gap-5">
+                    <div className="w-14 h-14 bg-pink-500/10 rounded-[16px] flex items-center justify-center shrink-0">
+                        <ListChecks className="w-7 h-7 text-pink-500" />
+                    </div>
+                    <div>
+                        <div className="flex items-baseline gap-2 mb-0.5">
+                            <span className="text-2xl font-black text-pink-500">{reviewingAttempt.total_correct}</span>
+                            <span className="text-base font-bold text-slate-400">/ {reviewingAttempt.total_questions}</span>
+                        </div>
+                        <p className="text-slate-500 font-bold text-[11px]">
+                            You got {reviewingAttempt.total_correct} out of {reviewingAttempt.total_questions} questions correct. ({reviewingAttempt.overall_score}%)
+                        </p>
+                    </div>
+                </div>
+
+                {/* Questions List */}
+                <div className="space-y-8">
+                    {reviewingAttempt.responses.map((resp: any, idx: number) => (
+                        <div key={idx} className="space-y-4">
+                            <div className="flex items-start justify-between gap-6">
+                                <div className="flex gap-4 min-w-0">
+                                    <div className="w-7 h-7 rounded-lg bg-pink-500 text-white flex items-center justify-center font-black text-[10px] shrink-0">
+                                        {idx + 1}
+                                    </div>
+                                    <h3 className="text-base font-bold dark:text-white leading-tight pt-0.5">
+                                        {resp.question_text}
+                                    </h3>
+                                </div>
+                            </div>
+
+                            {/* Options for MCQ */}
+                            {resp.question_type === "multiple_choice" && resp.options && (
+                                <div className="grid grid-cols-1 gap-2.5 ml-11">
+                                    {resp.options.map((option: string, optIdx: number) => {
+                                        const isCorrect = option === resp.correct_answer;
+                                        const isUserSelection = option === resp.user_answer;
+
+                                        let borderClass = "border-slate-100 dark:border-white/5";
+                                        let bgClass = "bg-white dark:bg-white/5";
+                                        let textClass = "dark:text-white";
+
+                                        if (isCorrect) {
+                                            borderClass = "border-emerald-500";
+                                            bgClass = "bg-emerald-500/5";
+                                            textClass = "text-emerald-600 dark:text-emerald-400 font-bold";
+                                        } else if (isUserSelection && !resp.is_correct) {
+                                            borderClass = "border-rose-500";
+                                            bgClass = "bg-rose-500/5";
+                                            textClass = "text-rose-600 dark:text-rose-400 font-bold";
+                                        }
+
+                                        return (
+                                            <div
+                                                key={optIdx}
+                                                className={`p-4 rounded-[20px] border-2 transition-all flex items-center gap-4 ${borderClass} ${bgClass} ${textClass}`}
+                                            >
+                                                <div className={`w-8 h-8 rounded-xl border-2 flex items-center justify-center shrink-0 text-sm font-bold ${isCorrect ? "bg-emerald-500 border-emerald-500 text-white" :
+                                                    isUserSelection ? "bg-rose-500 border-rose-500 text-white" :
+                                                        "border-slate-200 dark:border-white/10"
+                                                    }`}>
+                                                    {String.fromCharCode(65 + optIdx)}
+                                                </div>
+                                                <span className="text-sm">{option}</span>
+                                            </div>
+                                        );
+                                    })}
+                                </div>
+                            )}
+
+                            {/* Answers for other types */}
+                            {resp.question_type !== "multiple_choice" && (
+                                <div className="ml-11 space-y-3">
+                                    <div className={`p-4 rounded-[20px] border-2 ${resp.is_correct ? 'border-emerald-500 bg-emerald-500/5' : 'border-rose-500 bg-rose-500/5'}`}>
+                                        <p className="text-[10px] font-bold text-slate-400 uppercase tracking-widest mb-1.5">Your Answer</p>
+                                        <p className={`text-sm font-bold ${resp.is_correct ? 'text-emerald-600 dark:text-emerald-400' : 'text-rose-600 dark:text-rose-400'}`}>
+                                            {resp.user_answer || "No answer provided"}
+                                        </p>
+                                    </div>
+                                    <div className="p-4 rounded-[20px] border-2 border-emerald-500/30 bg-white dark:bg-white/5">
+                                        <p className="text-[10px] font-bold text-emerald-500 uppercase tracking-widest mb-1.5">Sample Correct Answer</p>
+                                        <p className="text-sm font-bold text-emerald-600 dark:text-emerald-400">
+                                            {resp.correct_answer}
+                                        </p>
+                                    </div>
+                                </div>
+                            )}
+
+                            {/* Explanation */}
+                            {resp.explanation && (
+                                <div className="ml-11 p-5 bg-blue-500/5 border border-blue-500/20 rounded-[20px] space-y-1.5">
+                                    <h4 className="text-[10px] font-bold text-blue-500 uppercase tracking-widest">Explanation</h4>
+                                    <p className="text-sm text-slate-600 dark:text-slate-400 leading-relaxed font-medium">
+                                        {resp.explanation}
+                                    </p>
+                                </div>
+                            )}
+                        </div>
+                    ))}
+                </div>
+            </div>
+        );
+    }
 
     if (activeTest && activeTest.questions && activeTest.questions.length > 0) {
         const currentQuestion = activeTest.questions[currentQuestionIndex];
@@ -416,22 +665,30 @@ export default function PracticeTestPage() {
                             <CheckCircle2 className="w-8 h-8 text-pink-500" />
                         </div>
                         <div className="space-y-1.5">
-                            <h2 className="text-2xl font-bold dark:text-white">Practice Set Completed!</h2>
-                            <p className="text-slate-500 text-sm">
-                                Excellent work. You should now review your answers to see how you did.
-                            </p>
+                            <h2 className="text-2xl font-bold dark:text-white">
+                                {testResult ? testResult.message : "Practice Set Completed!"}
+                            </h2>
+                            {testResult && (
+                                <div className="flex flex-col items-center gap-2 mt-4">
+                                    <div className="text-4xl font-black text-pink-500">
+                                        {testResult.overall_score}%
+                                    </div>
+                                    <p className="text-slate-500 text-sm font-medium">
+                                        Correct: {testResult.total_correct} / {testResult.total_questions}
+                                    </p>
+                                </div>
+                            )}
+                            {!testResult && (
+                                <p className="text-slate-500 text-sm">
+                                    Excellent work. You should now review your answers to see how you did.
+                                </p>
+                            )}
                         </div>
 
                         <div className="flex gap-3">
                             <button
-                                onClick={() => handleReviewTest(activeTest.id)}
-                                className="flex-1 bg-pink-500 text-white py-3.5 rounded-xl font-bold flex items-center justify-center gap-2 hover:bg-pink-600 transition-all text-sm"
-                            >
-                                Review All Answers
-                            </button>
-                            <button
                                 onClick={resetTestState}
-                                className="flex-1 border border-slate-200 dark:border-slate-800 dark:text-white py-3.5 rounded-xl font-bold transition-all text-sm"
+                                className="flex-1 bg-pink-500 text-white py-3.5 rounded-xl font-bold transition-all text-sm"
                             >
                                 Done for Now
                             </button>
@@ -442,28 +699,24 @@ export default function PracticeTestPage() {
         }
 
         return (
-            <div className="max-w-[800px] mx-auto p-4 space-y-6">
+            <div className="max-w-[750px] mx-auto p-4 space-y-4">
                 {/* Test Header */}
                 <div className="flex items-center justify-between">
                     <button onClick={resetTestState} className="text-slate-500 hover:text-slate-700 dark:hover:text-white flex items-center gap-2 text-xs font-bold">
-                        <X className="w-3.5 h-3.5" /> {isReviewMode ? "Close Review" : "Exit Test"}
+                        <X className="w-3.5 h-3.5" /> Exit Test
                     </button>
                     <div className="flex flex-col items-center">
                         <span className="text-[10px] font-bold text-pink-500 bg-pink-500/10 px-2.5 py-1 rounded-full uppercase tracking-widest mb-1">
-                            {isReviewMode ? "Review Mode" : "Practice Mode"}
+                            Practice Mode
                         </span>
                         <div className="text-[10px] font-bold text-slate-400">
                             Question {currentQuestionIndex + 1} of {activeTest.total_questions}
                         </div>
                     </div>
-                    {isReviewMode ? (
-                        <div className="w-8" />
-                    ) : (
-                        <div className="flex items-center gap-2 text-slate-500 text-xs font-bold">
-                            <Clock className="w-3.5 h-3.5" />
-                            {activeTest.time}
-                        </div>
-                    )}
+                    <div className="flex items-center gap-2 text-slate-500 text-xs font-bold">
+                        <Clock className="w-3.5 h-3.5" />
+                        {activeTest.time}
+                    </div>
                 </div>
 
                 {/* Progress Bar */}
@@ -476,7 +729,7 @@ export default function PracticeTestPage() {
                 </div>
 
                 {/* Question Area */}
-                <div className="space-y-8 py-4">
+                <div className="space-y-5 py-2">
                     <div className="space-y-4">
                         <div className="flex items-start gap-4">
                             <div className="px-3 py-1 bg-pink-500 text-white rounded-lg text-xs font-black shrink-0 mt-1">
@@ -487,7 +740,7 @@ export default function PracticeTestPage() {
                             </h2>
                         </div>
 
-                        <div className="flex items-center gap-2 ml-14">
+                        <div className="flex items-center gap-2 ml-12">
                             <span className="text-[10px] font-bold uppercase tracking-wider text-slate-400 bg-slate-100 dark:bg-white/5 px-2 py-0.5 rounded">
                                 {currentQuestion.question_type.replace("_", " ")}
                             </span>
@@ -500,29 +753,23 @@ export default function PracticeTestPage() {
                         </div>
                     </div>
 
-                    <div className="ml-0 sm:ml-14 space-y-4">
+                    <div className="ml-0 sm:ml-12 space-y-3">
                         {/* Multiple Choice & True/False */}
                         {(currentQuestion.question_type === "multiple_choice" || currentQuestion.question_type === "truefalse") && (
                             <div className="grid grid-cols-1 gap-2.5">
                                 {(currentQuestion.options || (currentQuestion.question_type === "truefalse" ? ["True", "False"] : [])).map((option, idx) => {
                                     const isSelected = userAnswers[currentQuestion.question_id] === option;
-                                    const isCorrect = isReviewMode && currentQuestion.correct_answer === option;
 
                                     let styles = "border-slate-100 dark:border-white/5 bg-white dark:bg-white/5 dark:text-white";
-                                    if (isReviewMode) {
-                                        if (isCorrect) styles = "border-emerald-500 bg-emerald-500/5 text-emerald-600 dark:text-emerald-400";
-                                        else if (isSelected) styles = "border-rose-500 bg-rose-500/5 text-rose-600 dark:text-rose-400";
-                                        else styles = "opacity-50 border-slate-100 dark:border-white/5 bg-white dark:bg-white/5";
-                                    } else if (isSelected) {
+                                    if (isSelected) {
                                         styles = "border-pink-500 bg-pink-500/5 text-pink-500";
                                     }
 
                                     return (
                                         <button
                                             key={idx}
-                                            disabled={isReviewMode}
                                             onClick={() => handleAnswerChange(currentQuestion.question_id, option)}
-                                            className={`w-full text-left p-4 rounded-2xl border-2 transition-all font-bold group flex items-center justify-between ${styles}`}
+                                            className={`w-full text-left p-3 rounded-xl border-2 transition-all font-bold group flex items-center justify-between ${styles}`}
                                         >
                                             <div className="flex items-center gap-3">
                                                 <div className={`w-8 h-8 rounded-xl border-2 flex items-center justify-center shrink-0 text-sm transition-all ${isSelected ? "border-pink-500 bg-pink-500 text-white" : "border-slate-200 dark:border-white/10"
@@ -531,8 +778,6 @@ export default function PracticeTestPage() {
                                                 </div>
                                                 <span className="text-sm">{option}</span>
                                             </div>
-                                            {isReviewMode && isCorrect && <CheckCircle2 className="w-5 h-5 text-emerald-500" />}
-                                            {isReviewMode && isSelected && !isCorrect && <X className="w-5 h-5 text-rose-500" />}
                                         </button>
                                     );
                                 })}
@@ -544,18 +789,11 @@ export default function PracticeTestPage() {
                             <div className="space-y-4">
                                 <input
                                     type="text"
-                                    disabled={isReviewMode}
                                     className="w-full bg-slate-50 dark:bg-white/5 border border-slate-200 dark:border-white/10 p-4 rounded-2xl outline-none focus:ring-2 focus:ring-pink-500/20 dark:text-white font-bold"
                                     placeholder="Type your answer here..."
                                     value={userAnswers[currentQuestion.question_id] || ""}
                                     onChange={(e) => handleAnswerChange(currentQuestion.question_id, e.target.value)}
                                 />
-                                {isReviewMode && (
-                                    <div className="p-4 bg-emerald-500/5 border border-emerald-500/20 rounded-2xl">
-                                        <p className="text-[10px] font-bold text-emerald-500 uppercase tracking-widest mb-1">Correct Answer</p>
-                                        <p className="text-sm font-bold text-emerald-600 dark:text-emerald-400">{currentQuestion.correct_answer}</p>
-                                    </div>
-                                )}
                             </div>
                         )}
 
@@ -563,36 +801,22 @@ export default function PracticeTestPage() {
                         {currentQuestion.question_type === "shortanswer" && (
                             <div className="space-y-4">
                                 <textarea
-                                    disabled={isReviewMode}
                                     rows={4}
                                     className="w-full bg-slate-50 dark:bg-white/5 border border-slate-200 dark:border-white/10 p-4 rounded-2xl outline-none focus:ring-2 focus:ring-pink-500/20 dark:text-white font-bold resize-none"
                                     placeholder="Write your response..."
                                     value={userAnswers[currentQuestion.question_id] || ""}
                                     onChange={(e) => handleAnswerChange(currentQuestion.question_id, e.target.value)}
                                 />
-                                {isReviewMode && (
-                                    <div className="p-4 bg-emerald-500/5 border border-emerald-500/20 rounded-2xl">
-                                        <p className="text-[10px] font-bold text-emerald-500 uppercase tracking-widest mb-1">Sample Correct Answer</p>
-                                        <p className="text-sm font-bold text-emerald-600 dark:text-emerald-400">{currentQuestion.correct_answer}</p>
-                                    </div>
-                                )}
                             </div>
                         )}
 
-                        {/* Explanation */}
-                        {isReviewMode && currentQuestion.explanation && (
-                            <div className="p-4 bg-blue-500/5 border border-blue-500/20 rounded-2xl">
-                                <p className="text-[10px] font-bold text-blue-500 uppercase tracking-widest mb-1">Explanation</p>
-                                <p className="text-sm text-slate-600 dark:text-slate-400 leading-relaxed font-medium">{currentQuestion.explanation}</p>
-                            </div>
-                        )}
                     </div>
                 </div>
 
                 {/* Navigation Buttons */}
-                <div className="flex items-center justify-between pt-6 ml-0 sm:ml-14">
+                <div className="flex items-center justify-between pt-4 ml-0 sm:ml-12">
                     <button
-                        onClick={() => setCurrentQuestionIndex(prev => prev - 1)}
+                        onClick={handlePreviousQuestion}
                         disabled={currentQuestionIndex === 0}
                         className="px-6 py-3 rounded-xl font-bold text-sm text-slate-500 disabled:opacity-30 disabled:cursor-not-allowed hover:bg-slate-100 dark:hover:bg-white/5 transition-all flex items-center gap-2"
                     >
@@ -602,14 +826,21 @@ export default function PracticeTestPage() {
                     <div className="flex items-center gap-2">
                         {isLastQuestion ? (
                             <button
-                                onClick={() => isReviewMode ? resetTestState() : setShowResults(true)}
-                                className="bg-pink-500 text-white px-8 py-3 rounded-xl font-bold shadow-lg shadow-pink-500/20 hover:scale-[1.02] active:scale-95 transition-all text-sm"
+                                onClick={handleSubmitTest}
+                                disabled={isSubmitting}
+                                className="bg-pink-500 text-white px-8 py-3 rounded-xl font-bold shadow-lg shadow-pink-500/20 hover:scale-[1.02] active:scale-95 transition-all text-sm flex items-center gap-2"
                             >
-                                {isReviewMode ? "Finish Review" : "Finish Test"}
+                                {isSubmitting ? (
+                                    <>
+                                        <Loader2 className="w-4 h-4 animate-spin" /> Submitting...
+                                    </>
+                                ) : (
+                                    "Finish Test"
+                                )}
                             </button>
                         ) : (
                             <button
-                                onClick={() => setCurrentQuestionIndex(prev => prev + 1)}
+                                onClick={handleNextQuestion}
                                 className="bg-slate-900 dark:bg-white text-white dark:text-slate-900 px-8 py-3 rounded-xl font-bold hover:scale-[1.02] active:scale-95 transition-all text-sm flex items-center gap-2"
                             >
                                 Next Question <ChevronRight className="w-4 h-4" />
@@ -710,26 +941,23 @@ export default function PracticeTestPage() {
                                             <span className="flex items-center gap-2 whitespace-nowrap">
                                                 <Clock className="w-3.5 h-3.5 text-slate-400" /> {test.time}
                                             </span>
-                                            {isLoadingDetail && <Loader2 className="w-3 h-3 animate-spin text-pink-500" />}
+                                            {isLoadingDetail === test.id && <Loader2 className="w-3 h-3 animate-spin text-pink-500" />}
                                         </div>
                                     </div>
 
                                     <div className={viewMode === "grid" ? "mt-5 pt-5 border-t border-slate-50 dark:border-white/5 flex items-center justify-between" : "flex items-center gap-4"}>
-                                        <div className="flex items-center gap-2 text-slate-500 text-xs font-bold">
-                                            <RotateCcw className="w-3.5 h-3.5" /> {test.times_attempted} Attempts
-                                        </div>
+                                        <button
+                                            onClick={() => fetchTestHistory(test)}
+                                            className="flex items-center gap-2 text-slate-500 text-xs font-bold hover:text-pink-500 transition-colors"
+                                        >
+                                            {test.times_attempted} Attempts
+                                        </button>
                                         <div className="flex items-center gap-2">
-                                            <button
-                                                onClick={() => handleReviewTest(test.id)}
-                                                className="bg-slate-50 dark:bg-white/5 text-slate-600 dark:text-slate-400 hover:bg-slate-200 dark:hover:bg-white/10 transition-all duration-300 py-2.5 px-4 rounded-xl text-xs font-bold flex items-center justify-center gap-2 shadow-sm whitespace-nowrap"
-                                            >
-                                                Review
-                                            </button>
                                             <button
                                                 onClick={() => handleStartTest(test.id)}
                                                 className="bg-slate-50 dark:bg-white/5 text-slate-600 dark:text-slate-400 hover:bg-pink-500 hover:text-white transition-all duration-300 py-2.5 px-6 rounded-xl text-xs font-bold flex items-center justify-center gap-2 shadow-sm whitespace-nowrap"
                                             >
-                                                <Play className="w-3.5 h-3.5 fill-current" /> Start Test
+                                                {test.times_attempted > 0 ? <RotateCcw className="w-3.5 h-3.5" /> : <Play className="w-3.5 h-3.5 fill-current" />} {test.times_attempted > 0 ? "Re-take Test" : "Start Test"}
                                             </button>
                                         </div>
                                     </div>
@@ -1014,6 +1242,148 @@ export default function PracticeTestPage() {
                                             )}
                                         </button>
                                     )}
+                                </div>
+                            </div>
+                        </motion.div>
+                    </>
+                )}
+            </AnimatePresence>
+
+            {/* History Modal */}
+            <AnimatePresence>
+                {showHistoryModal && (
+                    <>
+                        <motion.div
+                            initial={{ opacity: 0 }}
+                            animate={{ opacity: 1 }}
+                            exit={{ opacity: 0 }}
+                            onClick={() => setShowHistoryModal(false)}
+                            className="fixed inset-0 bg-black/30 backdrop-blur-sm z-[100] w-screen h-screen"
+                        />
+                        <motion.div
+                            initial={{ opacity: 0, scale: 0.9, y: 40 }}
+                            animate={{ opacity: 1, scale: 1, y: 0 }}
+                            exit={{ opacity: 0, scale: 0.9, y: 40 }}
+                            className="fixed left-1/2 top-1/2 -translate-x-1/2 -translate-y-1/2 w-[92%] max-w-[600px] bg-white dark:bg-[#1A1A1E] rounded-[32px] shadow-2xl z-[101] overflow-hidden border border-slate-200 dark:border-white/10"
+                        >
+                            <div className="relative h-full flex flex-col max-h-[85vh]">
+                                {/* Modal Header */}
+                                <div className="p-8 pb-4 flex items-center justify-between border-b border-slate-100 dark:border-white/5">
+                                    <div className="flex items-center gap-4">
+                                        <div className="w-12 h-12 bg-pink-500/10 rounded-2xl flex items-center justify-center">
+                                            <RotateCcw className="w-6 h-6 text-pink-500" />
+                                        </div>
+                                        <div>
+                                            <h2 className="text-2xl font-bold dark:text-white">Attempt History</h2>
+                                            <p className="text-slate-500 text-xs font-medium">{selectedTestForHistory?.title}</p>
+                                        </div>
+                                    </div>
+                                    <button
+                                        onClick={() => setShowHistoryModal(false)}
+                                        className="p-2 hover:bg-slate-100 dark:hover:bg-white/5 rounded-xl transition-colors group"
+                                    >
+                                        <X className="w-5 h-5 text-slate-400 group-hover:text-slate-600 dark:group-hover:text-white" />
+                                    </button>
+                                </div>
+
+                                {/* Modal Body */}
+                                <div className="p-6 overflow-y-auto custom-scrollbar flex-1">
+                                    {isLoadingHistory ? (
+                                        <div className="flex flex-col items-center justify-center py-20 gap-4">
+                                            <Loader2 className="w-8 h-8 animate-spin text-pink-500" />
+                                            <p className="text-slate-500 text-sm font-medium">Fetching your history...</p>
+                                        </div>
+                                    ) : historyAttempts.length === 0 ? (
+                                        <div className="text-center py-20 space-y-4">
+                                            <div className="w-16 h-16 bg-slate-100 dark:bg-white/5 rounded-full flex items-center justify-center mx-auto">
+                                                <RotateCcw className="w-8 h-8 text-slate-300" />
+                                            </div>
+                                            <p className="text-slate-500 font-medium">No attempts recorded yet.</p>
+                                        </div>
+                                    ) : (
+                                        <div className="space-y-4">
+                                            {historyAttempts.map((attempt) => (
+                                                <div
+                                                    key={attempt.attempt_id}
+                                                    className="p-5 bg-slate-50 dark:bg-white/5 border border-slate-100 dark:border-white/10 rounded-2xl space-y-4 hover:border-pink-500/20 transition-all group"
+                                                >
+                                                    <div className="flex items-center justify-between">
+                                                        <div className="flex items-center gap-3">
+                                                            <div className="w-10 h-10 bg-white dark:bg-[#1A1A1E] border border-slate-200 dark:border-white/10 rounded-xl flex items-center justify-center text-xs font-black dark:text-white shadow-sm">
+                                                                #{attempt.attempt_number}
+                                                            </div>
+                                                            <div>
+                                                                <p className="text-sm font-bold dark:text-white leading-none mb-1">Attempt #{attempt.attempt_number}</p>
+                                                                <p className="text-[10px] text-slate-500 font-bold uppercase tracking-wider">
+                                                                    {new Date(attempt.completed_at).toLocaleDateString([], { month: 'short', day: 'numeric', year: 'numeric', hour: '2-digit', minute: '2-digit' })}
+                                                                </p>
+                                                            </div>
+                                                        </div>
+                                                        <div className="text-right">
+                                                            <div className="text-xl font-black text-pink-500 leading-none mb-1">
+                                                                {attempt.overall_score}%
+                                                            </div>
+                                                            <p className="text-[10px] text-slate-500 font-bold uppercase tracking-wider">Overall Score</p>
+                                                        </div>
+                                                    </div>
+
+                                                    <div className="grid grid-cols-3 gap-3">
+                                                        <div className="p-3 bg-white dark:bg-[#1A1A1E] rounded-xl border border-slate-100 dark:border-white/5 shadow-sm text-center">
+                                                            <p className="text-[10px] text-slate-500 font-bold uppercase tracking-widest mb-1">Correct</p>
+                                                            <p className="text-sm font-black dark:text-white">{attempt.total_correct} / {attempt.total_questions}</p>
+                                                        </div>
+                                                        <div className="p-3 bg-white dark:bg-[#1A1A1E] rounded-xl border border-slate-100 dark:border-white/5 shadow-sm text-center">
+                                                            <p className="text-[10px] text-slate-500 font-bold uppercase tracking-widest mb-1">Time</p>
+                                                            <p className="text-sm font-black dark:text-white">
+                                                                {Math.floor(attempt.total_time_seconds / 60)}m {attempt.total_time_seconds % 60}s
+                                                            </p>
+                                                        </div>
+                                                        <div className="p-3 bg-white dark:bg-[#1A1A1E] rounded-xl border border-slate-100 dark:border-white/5 shadow-sm text-center">
+                                                            <p className="text-[10px] text-slate-500 font-bold uppercase tracking-widest mb-1">Status</p>
+                                                            <p className="text-[10px] font-bold text-emerald-500 bg-emerald-500/10 px-2 py-0.5 rounded-full inline-block uppercase tracking-wider">
+                                                                {attempt.status}
+                                                            </p>
+                                                        </div>
+                                                    </div>
+
+                                                    {/* Row for Unit Stats & Review Button */}
+                                                    <div className="pt-4 border-t border-slate-100 dark:border-white/5 flex items-center justify-between gap-4">
+                                                        <div className="flex flex-wrap gap-2">
+                                                            {Object.entries(attempt.scores_by_unit).map(([unit, stats]) => (
+                                                                <div
+                                                                    key={unit}
+                                                                    className="px-2.5 py-1 bg-white dark:bg-[#1A1A1E] border border-slate-200 dark:border-white/10 rounded-lg flex items-center gap-1.5 shadow-sm"
+                                                                >
+                                                                    <span className="text-[10px] font-bold text-slate-500 truncate max-w-[100px]">{unit}</span>
+                                                                    <span className="text-[10px] font-black text-pink-500">{stats.percentage}%</span>
+                                                                </div>
+                                                            ))}
+                                                        </div>
+
+                                                        <button
+                                                            onClick={() => fetchAttemptReview(selectedTestForHistory?.id || "", attempt.attempt_id)}
+                                                            disabled={isLoadingReview === attempt.attempt_id}
+                                                            className="flex items-center gap-1.5 text-pink-500 hover:text-pink-600 font-bold text-xs transition-all whitespace-nowrap active:scale-95 px-1 underline underline-offset-4 decoration-2 decoration-pink-500/30 hover:decoration-pink-500"
+                                                        >
+                                                            {isLoadingReview === attempt.attempt_id ? (
+                                                                <Loader2 className="w-4 h-4 animate-spin" />
+                                                            ) : (
+                                                                <>Review Answers <ChevronRight className="w-4 h-4" /></>
+                                                            )}
+                                                        </button>
+                                                    </div>
+                                                </div>
+                                            ))}
+                                        </div>
+                                    )}
+                                </div>
+                                <div className="p-6 pt-0 border-t border-slate-100 dark:border-white/5 flex justify-end">
+                                    <button
+                                        onClick={() => setShowHistoryModal(false)}
+                                        className="mt-6 px-10 py-3 bg-slate-900 dark:bg-white text-white dark:text-slate-900 rounded-2xl font-black text-sm hover:scale-[1.02] active:scale-95 transition-all shadow-xl shadow-slate-900/10"
+                                    >
+                                        Close History
+                                    </button>
                                 </div>
                             </div>
                         </motion.div>

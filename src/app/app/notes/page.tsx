@@ -94,11 +94,15 @@ export default function NotesPage() {
 
     // Document Editor State
     const [isEditorOpen, setIsEditorOpen] = useState(false);
-    const [activeDocument, setActiveDocument] = useState<{ id: string; name: string; content: string } | null>(null);
+    const [activeDocument, setActiveDocument] = useState<{ id: string; name: string; content: string; folder_id: string | null } | null>(null);
 
     // Folder Rename State
     const [editingFolder, setEditingFolder] = useState<MaterialFolder | null>(null);
     const [editFolderName, setEditFolderName] = useState("");
+
+    // Drag and Drop visual state
+    const [dragOverFolderId, setDragOverFolderId] = useState<string | null>(null);
+    const [isDragOverRoot, setIsDragOverRoot] = useState(false);
 
     // Folder Color logic (visual only for now as API doesn't store color)
     const getFolderColor = (folderId: string) => {
@@ -162,22 +166,38 @@ export default function NotesPage() {
     };
 
     const handleEditDocument = (resource: MaterialResource) => {
-        setActiveDocument({ id: resource._id, name: resource.title, content: resource.content || "" });
+        setActiveDocument({
+            id: resource._id,
+            name: resource.title,
+            content: resource.content || "",
+            folder_id: resource.folder_id
+        });
         setIsEditorOpen(true);
     };
 
     const handleSaveDocument = async (title: string, content: string) => {
         try {
             const token = localStorage.getItem("access_token");
-            const payload = {
+            const isEditing = activeDocument && activeDocument.id;
+
+            const payload: any = {
                 title: title || "Untitled Document",
-                type: "note",
-                folder_id: selectedFolderId === "all" ? null : selectedFolderId,
-                content: content
+                content: content,
+                folder_id: isEditing ? activeDocument.folder_id : (selectedFolderId === "all" ? null : selectedFolderId)
             };
 
-            const response = await fetch(`${API_BASE_URL}/api/resources/note`, {
-                method: "POST",
+            const url = isEditing
+                ? `${API_BASE_URL}/api/resources/${activeDocument.id}`
+                : `${API_BASE_URL}/api/resources/note`;
+
+            const method = isEditing ? "PUT" : "POST";
+
+            if (!isEditing) {
+                payload.type = "note";
+            }
+
+            const response = await fetch(url, {
+                method: method,
                 headers: {
                     "Content-Type": "application/json",
                     "Authorization": `Bearer ${token}`
@@ -311,6 +331,76 @@ export default function NotesPage() {
             });
             setTimeout(() => setToast(null), 3000);
             if (fileInputRef.current) fileInputRef.current.value = "";
+        }
+    };
+
+    const handleMoveResource = async (resourceId: string, folderId: string | null) => {
+        const token = localStorage.getItem("access_token");
+        if (!token) {
+            setToast({ message: "You must be logged in to move items.", type: "error" });
+            return;
+        }
+
+        try {
+            // Using local proxy to avoid CORS issues with PATCH method
+            const url = `/api/proxy/move?resource_id=${resourceId}&folder_id=${folderId || 'null'}`;
+
+            console.log("Drag & Drop: Moving resource via proxy...", { url });
+
+            const response = await fetch(url, {
+                method: "PATCH",
+                headers: {
+                    "Authorization": `Bearer ${token}`
+                }
+            });
+
+            if (response.ok) {
+                const data = await response.json();
+                console.log("Drag & Drop: Success!", data);
+                await fetchResources();
+                setToast({ message: "Resource moved successfully", type: "success" });
+                setTimeout(() => setToast(null), 3000);
+            } else {
+                const errorData = await response.json().catch(() => ({}));
+                console.error("Drag & Drop: Failed", response.status, errorData);
+                setToast({ message: `Failed to move resource: ${errorData.message || response.statusText}`, type: "error" });
+                setTimeout(() => setToast(null), 3000);
+            }
+        } catch (error) {
+            console.error("Drag & Drop: Proxy Error", error);
+            setToast({
+                message: "Failed to move resource. Please check the console for details.",
+                type: "error"
+            });
+            setTimeout(() => setToast(null), 3000);
+        }
+    };
+
+    const handleDragStart = (e: React.DragEvent, resourceId: string) => {
+        e.dataTransfer.setData("resourceId", resourceId);
+        e.dataTransfer.effectAllowed = "move";
+    };
+
+    const handleDragOver = (e: React.DragEvent) => {
+        e.preventDefault();
+        e.dataTransfer.dropEffect = "move";
+    };
+
+    const handleDropOnFolder = (e: React.DragEvent, folderId: string) => {
+        e.preventDefault();
+        setDragOverFolderId(null);
+        const resourceId = e.dataTransfer.getData("resourceId");
+        if (resourceId) {
+            handleMoveResource(resourceId, folderId);
+        }
+    };
+
+    const handleDropOnRoot = (e: React.DragEvent) => {
+        e.preventDefault();
+        setIsDragOverRoot(false);
+        const resourceId = e.dataTransfer.getData("resourceId");
+        if (resourceId) {
+            handleMoveResource(resourceId, null);
         }
     };
 
@@ -549,7 +639,11 @@ export default function NotesPage() {
                                         {selectedFolderId !== "all" && (
                                             <button
                                                 onClick={() => setSelectedFolderId("all")}
-                                                className="flex items-center gap-1 px-2 py-1 bg-slate-100 dark:bg-white/5 hover:bg-slate-200 dark:hover:bg-white/10 rounded-lg text-[10px] font-bold text-primary transition-colors"
+                                                onDragOver={handleDragOver}
+                                                onDragEnter={() => setIsDragOverRoot(true)}
+                                                onDragLeave={() => setIsDragOverRoot(false)}
+                                                onDrop={handleDropOnRoot}
+                                                className={`flex items-center gap-1 px-2 py-1 bg-slate-100 dark:bg-white/5 hover:bg-slate-200 dark:hover:bg-white/10 rounded-lg text-[10px] font-bold text-primary transition-all border-2 ${isDragOverRoot ? "border-primary bg-primary/10" : "border-transparent"}`}
                                             >
                                                 ← All
                                             </button>
@@ -672,8 +766,13 @@ export default function NotesPage() {
                                                     handleDownload((item as any).file_url, (item as any).name || 'download');
                                                 }
                                             }}
-                                            className={`group bg-white dark:bg-[#121214] border border-slate-200 dark:border-slate-800 rounded-2xl hover:border-primary/50 hover:shadow-xl cursor-pointer overflow-hidden ${viewMode === "grid" ? "flex flex-col h-[155px]" : "p-3 flex items-center justify-between"
-                                                }`}
+                                            draggable={item.itemType === 'file'}
+                                            onDragStart={(e: any) => item.itemType === 'file' ? handleDragStart(e, item.id) : null}
+                                            onDragOver={(e: any) => item.itemType === 'folder' ? handleDragOver(e) : undefined}
+                                            onDragEnter={() => item.itemType === 'folder' && setDragOverFolderId(item.id)}
+                                            onDragLeave={() => item.itemType === 'folder' && setDragOverFolderId(null)}
+                                            onDrop={(e: any) => item.itemType === 'folder' ? handleDropOnFolder(e, item.id) : undefined}
+                                            className={`group bg-white dark:bg-[#121214] border border-slate-200 dark:border-slate-800 rounded-2xl hover:border-primary/50 hover:shadow-xl cursor-pointer overflow-hidden ${viewMode === "grid" ? "flex flex-col h-[155px]" : "p-3 flex items-center justify-between"} ${item.itemType === 'folder' && dragOverFolderId === item.id ? 'bg-primary/10 border-primary shadow-lg ring-2 ring-primary/20 scale-[1.02]' : ''}`}
                                             transition={{
                                                 layout: { duration: 0.4, ease: [0.23, 1, 0.32, 1] }
                                             }}
@@ -701,16 +800,18 @@ export default function NotesPage() {
 
                                                     {/* Overlay Actions */}
                                                     <div className="absolute top-2 right-2 flex gap-1 opacity-0 group-hover:opacity-100 transition-opacity">
-                                                        <button
-                                                            onClick={(e) => {
-                                                                e.stopPropagation();
-                                                                setEditingFolder(item as any);
-                                                                setEditFolderName((item as any).name || (item as any).title);
-                                                            }}
-                                                            className="p-1.5 bg-white/90 dark:bg-slate-800/90 backdrop-blur-sm hover:bg-white dark:hover:bg-primary/20 rounded-lg shadow-sm group/edit"
-                                                        >
-                                                            <Type className="w-3.5 h-3.5 text-slate-500 group-hover/edit:text-primary" />
-                                                        </button>
+                                                        {item.itemType === 'folder' && (
+                                                            <button
+                                                                onClick={(e) => {
+                                                                    e.stopPropagation();
+                                                                    setEditingFolder(item as any);
+                                                                    setEditFolderName((item as any).name || (item as any).title);
+                                                                }}
+                                                                className="p-1.5 bg-white/90 dark:bg-slate-800/90 backdrop-blur-sm hover:bg-white dark:hover:bg-primary/20 rounded-lg shadow-sm group/edit"
+                                                            >
+                                                                <Type className="w-3.5 h-3.5 text-slate-500 group-hover/edit:text-primary" />
+                                                            </button>
+                                                        )}
                                                         <button
                                                             onClick={(e) => {
                                                                 e.stopPropagation();

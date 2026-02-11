@@ -25,6 +25,7 @@ import {
     CheckCircle2
 } from "lucide-react";
 import { motion, AnimatePresence } from "framer-motion";
+import Link from "next/link";
 import { API_BASE_URL } from "@/lib/constants";
 
 
@@ -333,7 +334,12 @@ function StreakWidget() {
                         )}
                     </div>
                 </div>
-                <button className="text-[10px] font-bold text-slate-400 dark:text-slate-500 uppercase tracking-wider hover:text-primary transition-colors">View Leaderboard</button>
+                <Link
+                    href="/app/leaderboard"
+                    className="text-[10px] font-bold text-slate-400 dark:text-slate-500 uppercase tracking-wider hover:text-primary transition-colors"
+                >
+                    View Leaderboard
+                </Link>
             </div>
         </div>
     );
