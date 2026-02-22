@@ -1,6 +1,6 @@
 "use client";
 
-import React, { useState, useRef } from "react";
+import React, { useState, useRef, Suspense } from "react";
 import { useSearchParams } from "next/navigation";
 import {
     FileText,
@@ -70,7 +70,7 @@ const FOLDER_COLORS = [
 
 const ALLOWED_EXTENSIONS = ['pdf', 'png', 'jpg', 'jpeg', 'svg', 'pptx', 'docx', 'xlsx'];
 
-export default function NotesPage() {
+function NotesPageContent() {
     const [folders, setFolders] = useState<MaterialFolder[]>([]);
     const [resources, setResources] = useState<MaterialResource[]>([]);
     const [isLoading, setIsLoading] = useState(false);
@@ -1167,3 +1167,19 @@ export default function NotesPage() {
         </div>
     );
 }
+
+export default function NotesPage() {
+    return (
+        <Suspense fallback={
+            <div className="flex items-center justify-center min-h-screen bg-white dark:bg-[#0A0A0B]">
+                <div className="flex flex-col items-center gap-4">
+                    <div className="w-12 h-12 border-4 border-primary/20 border-t-primary rounded-full animate-spin" />
+                    <p className="text-slate-500 text-sm font-medium animate-pulse">Loading notes...</p>
+                </div>
+            </div>
+        }>
+            <NotesPageContent />
+        </Suspense>
+    );
+}
+
