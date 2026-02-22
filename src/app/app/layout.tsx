@@ -47,11 +47,11 @@ import { API_BASE_URL } from "@/lib/constants";
 
 
 const navItems = [
-    { icon: Calendar, label: "Calendar", href: "/app/calendar", color: "text-rose-500", bgColor: "bg-rose-500/10" },
+    // { icon: Calendar, label: "Calendar", href: "/app/calendar", color: "text-rose-500", bgColor: "bg-rose-500/10" },
     { icon: SquareStack, label: "Flashcards", href: "/app/flashcards", color: "text-sky-500", bgColor: "bg-sky-500/10" },
     { icon: HelpCircle, label: "Quizzes", href: "/app/quizzes", color: "text-amber-500", bgColor: "bg-amber-500/10" },
     { icon: BookOpen, label: "Summarizer", href: "/app/summarizer", color: "text-emerald-500", bgColor: "bg-emerald-500/10" },
-    { icon: GraduationCap, label: "Tutor Me", href: "/app/tutor", color: "text-violet-500", bgColor: "bg-violet-500/10" },
+    //{ icon: GraduationCap, label: "Tutor Me", href: "/app/tutor", color: "text-violet-500", bgColor: "bg-violet-500/10" },
     { icon: ListChecks, label: "Practice Test", href: "/app/practice-test", color: "text-pink-500", bgColor: "bg-pink-500/10" },
     { icon: Film, label: "Explainers", href: "/app/explainers", color: "text-orange-500", bgColor: "bg-orange-500/10" },
     { icon: FileText, label: "Notes & Resources", href: "/app/notes", color: "text-cyan-500", bgColor: "bg-cyan-500/10" },
@@ -410,14 +410,14 @@ function AppContent({ children }: { children: React.ReactNode }) {
                         >
                             <Menu className="w-5 h-5" />
                         </button>
-                        <div className="relative max-w-md w-full hidden md:block ml-2">
+                        {/* <div className="relative max-w-md w-full hidden md:block ml-2">
                             <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-slate-500 dark:text-slate-400" />
                             <input
                                 type="text"
                                 placeholder="Search everything..."
                                 className="w-full bg-slate-50 dark:bg-slate-900/50 border border-slate-200 dark:border-slate-800 py-2 pl-10 pr-4 rounded-xl text-sm outline-none focus:ring-2 focus:ring-primary/20 focus:border-primary transition-all dark:text-white placeholder:text-slate-500 dark:placeholder:text-slate-400"
                             />
-                        </div>
+                        </div> */}
                     </div>
 
                     <div className="flex items-center gap-3">
@@ -515,10 +515,10 @@ function AppContent({ children }: { children: React.ReactNode }) {
                             </div>
                         </div>
 
-                        <button className="p-2 text-slate-500 hover:bg-slate-50 dark:hover:bg-slate-800 rounded-xl transition-colors relative">
+                        {/* <button className="p-2 text-slate-500 hover:bg-slate-50 dark:hover:bg-slate-800 rounded-xl transition-colors relative">
                             <Bell className="w-5 h-5" />
                             <span className="absolute top-2 right-2 w-2 h-2 bg-red-500 rounded-full border-2 border-white dark:border-[#121214]"></span>
-                        </button>
+                        </button> */}
 
                         <div className="relative">
                             <button

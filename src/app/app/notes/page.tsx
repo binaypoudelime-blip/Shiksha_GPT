@@ -1,6 +1,7 @@
 "use client";
 
 import React, { useState, useRef } from "react";
+import { useSearchParams } from "next/navigation";
 import {
     FileText,
     Folder,
@@ -73,6 +74,7 @@ export default function NotesPage() {
     const [folders, setFolders] = useState<MaterialFolder[]>([]);
     const [resources, setResources] = useState<MaterialResource[]>([]);
     const [isLoading, setIsLoading] = useState(false);
+    const searchParams = useSearchParams();
 
     const [viewMode, setViewMode] = useState<"grid" | "list">("grid");
     const [isFolderModalOpen, setIsFolderModalOpen] = useState(false);
@@ -159,6 +161,12 @@ export default function NotesPage() {
     React.useEffect(() => {
         fetchResources();
     }, [selectedFolderId]);
+
+    React.useEffect(() => {
+        if (searchParams.get('upload') === 'true') {
+            setIsUploadModalOpen(true);
+        }
+    }, [searchParams]);
 
     const handleCreateBlankDocument = () => {
         setActiveDocument(null);

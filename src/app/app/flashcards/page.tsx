@@ -62,7 +62,7 @@ export default function FlashcardsPage() {
     const [units, setUnits] = useState<Unit[]>([]);
     const [selectedSubject, setSelectedSubject] = useState<Subject | null>(null);
     const [selectedUnit, setSelectedUnit] = useState<Unit | null>(null);
-    const [numCards, setNumCards] = useState(10);
+    const [numCards, setNumCards] = useState(5);
     const [isLoadingSubjects, setIsLoadingSubjects] = useState(false);
     const [isLoadingUnits, setIsLoadingUnits] = useState(false);
     const [isGenerating, setIsGenerating] = useState(false);
@@ -157,7 +157,7 @@ export default function FlashcardsPage() {
     const resetForm = () => {
         setSelectedSubject(null);
         setSelectedUnit(null);
-        setNumCards(10);
+        setNumCards(5);
         setUnits([]);
     };
 
